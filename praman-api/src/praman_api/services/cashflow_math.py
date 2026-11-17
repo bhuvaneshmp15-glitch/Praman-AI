@@ -107,7 +107,7 @@ def compute_runway_impact(
             "post_emi_free_cash_without_praman": format_inr(post_emi_free_cash_without_praman),
             "post_emi_free_cash_with_praman": format_inr(post_emi_free_cash_with_praman),
             "buffer_preservation": format_inr(buffer_preservation),
-            "coverage_without_praman": f"{emi_coverage_ratio_without_praman}x",
-            "coverage_with_praman": f"{emi_coverage_ratio_with_praman}x",
+            "coverage_without_praman": f"{emi_coverage_ratio_without_praman:.2f}x",
+            "coverage_with_praman": f"{emi_coverage_ratio_with_praman:.2f}x",
         }
     }
