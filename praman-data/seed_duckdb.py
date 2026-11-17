@@ -1,5 +1,5 @@
 """Praman Financial Copilot - DuckDB Seeder.
-Loads generated CSVs into a local DuckDB analytical database with high-performance OLAP indexes.
+Loads generated CSVs into a local DuckDB analytical database with high-performance OLAP tables and indexes.
 """
 from pathlib import Path
 import duckdb
@@ -10,7 +10,7 @@ def seed_database(data_dir: Path = None):
     raw_dir = data_dir / "raw_csvs"
     db_path = data_dir / "praman.duckdb"
 
-    print(f"Connecting to DuckDB database at: {db_path}")
+    print(f"[seed_duckdb] Connecting to DuckDB database at: {db_path}")
     conn = duckdb.connect(str(db_path))
 
     csv_tables = {
@@ -24,11 +24,10 @@ def seed_database(data_dir: Path = None):
 
     for table_name, csv_path in csv_tables.items():
         if not csv_path.exists():
-            print(f"Warning: {csv_path} not found. Skipping table '{table_name}'.")
+            print(f"[seed_duckdb] Warning: {csv_path} not found. Skipping table '{table_name}'.")
             continue
 
-        print(f"Loading '{table_name}' from {csv_path.name}...")
-        # Use DuckDB's native high-performance auto CSV reader
+        print(f"[seed_duckdb] Loading '{table_name}' from {csv_path.name}...")
         conn.execute(f"DROP TABLE IF EXISTS {table_name}")
         conn.execute(
             f"CREATE TABLE {table_name} AS SELECT * FROM read_csv_auto('{csv_path.as_posix()}', header=True)"
@@ -36,8 +35,17 @@ def seed_database(data_dir: Path = None):
         count = conn.execute(f"SELECT COUNT(*) FROM {table_name}").fetchone()[0]
         print(f"  -> Created table '{table_name}' with {count:,} rows.")
 
+    # Create helpful analytical indexes for high-speed primary key lookups
+    try:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_row_id ON bank_statement(row_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_tally_invoice_id ON tally_invoices(invoice_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_rzp_payment_id ON razorpay_upi(payment_id)")
+    except Exception as e:
+        # Some versions or configurations of DuckDB handle auto-indexing
+        pass
+
     conn.close()
-    print("DuckDB database seeded successfully!")
+    print("[seed_duckdb] DuckDB analytical plane seeded successfully!")
 
 
 def main():
