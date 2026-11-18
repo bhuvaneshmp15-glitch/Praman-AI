@@ -10,6 +10,7 @@ from praman_api.api.cases import router as cases_router
 from praman_api.api.stream import router as stream_router
 from praman_api.api.citations import router as citations_router
 from praman_api.api.actions import router as actions_router
+from praman_api.api.tools import router as tools_router
 
 app = FastAPI(
     title="Praman Financial Copilot",
@@ -70,6 +71,7 @@ app.include_router(cases_router, prefix="/api")
 app.include_router(stream_router, prefix="/api")
 app.include_router(citations_router, prefix="/api")
 app.include_router(actions_router, prefix="/api")
+app.include_router(tools_router, prefix="/api")
 
 
 @app.get("/")

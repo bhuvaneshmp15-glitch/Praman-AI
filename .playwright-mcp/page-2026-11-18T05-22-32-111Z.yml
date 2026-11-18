@@ -1,0 +1,247 @@
+- generic [active] [ref=f2e1]:
+  - generic [ref=f2e3]:
+    - banner [ref=f2e4]:
+      - generic [ref=f2e5]:
+        - generic [ref=f2e6]:
+          - generic [ref=f2e7]: प्र
+          - generic [ref=f2e8]:
+            - generic [ref=f2e9]:
+              - generic [ref=f2e10]: Praman
+              - generic [ref=f2e11]: Autonomous Copilot
+            - paragraph [ref=f2e12]: Autonomous B2B Financial Reconciliation & Cash-Flow Protection Engine
+        - generic [ref=f2e13]:
+          - generic [ref=f2e21]: "DuckDB Semantic Engine:"
+          - generic [ref=f2e22]: 10,040 Rows Indexed
+          - generic [ref=f2e23]: "|"
+          - generic [ref=f2e27]: 4 Indic/Financial UDFs Active
+      - generic [ref=f2e29]:
+        - generic [ref=f2e30]: "1-Click Judge Scenarios:"
+        - generic [ref=f2e32]:
+          - button "Scenario 1 Missing GSTR-2B ITC Hold ₹1,84,000 · Sri Balaji Ent" [ref=f2e33] [cursor=pointer]:
+            - generic [ref=f2e36]:
+              - generic [ref=f2e37]:
+                - generic [ref=f2e38]: Scenario 1
+                - generic [ref=f2e39]: Missing GSTR-2B ITC Hold
+              - generic [ref=f2e40]: ₹1,84,000 · Sri Balaji Ent
+          - button "Scenario 2 UPI Switch Double-Debit Dispute ₹14,500 · RRN Proof" [ref=f2e44] [cursor=pointer]:
+            - generic [ref=f2e50]:
+              - generic [ref=f2e51]:
+                - generic [ref=f2e52]: Scenario 2
+                - generic [ref=f2e53]: UPI Switch Double-Debit Dispute
+              - generic [ref=f2e54]: ₹14,500 · RRN Proof
+          - button "Scenario 3 B2B SLA Downtime Pro-Rata Credit ₹84,000 -> ₹5,600" [ref=f2e55] [cursor=pointer]:
+            - generic [ref=f2e58]:
+              - generic [ref=f2e59]:
+                - generic [ref=f2e60]: Scenario 3
+                - generic [ref=f2e61]: B2B SLA Downtime Pro-Rata Credit
+              - generic [ref=f2e62]: ₹84,000 -> ₹5,600
+    - main [ref=f2e63]:
+      - generic [ref=f2e64]:
+        - generic [ref=f2e66]:
+          - generic [ref=f2e67]:
+            - generic [ref=f2e68]: praman-duckdb-plane://semantic-trace
+            - generic [ref=f2e76]: Semantic Plane Standby
+          - generic [ref=f2e80]:
+            - generic [ref=f2e99]:
+              - generic [ref=f2e100]:
+                - generic [ref=f2e101]: "Attempt 1: Naive fuzzy match against bank narrations at 0.80 threshold"
+                - generic [ref=f2e105]: Semantic Plane CTE
+              - generic [ref=f2e106]: SELECT t.invoice_id, t.vendor_name, b.row_id, b.narration, jw_sim(b.narration, t.vendor_name) AS sim FROM tally_invoices t JOIN bank_statement b ON jw_sim(b.narration, t.vendor_name) >= 0.80 WHERE t.invoice_id = 'INV-2026-104'
+            - generic [ref=f2e108]:
+              - generic [ref=f2e109]:
+                - generic [ref=f2e110]: "Self-Healing SQL: Attempt 1 Guardrail Intercepted"
+                - generic [ref=f2e113]: SqlSemanticError
+              - generic [ref=f2e114]: "CARTESIAN FANOUT DETECTED: Fuzzy join threshold too loose or missing ranking window function. Tighten jw_sim >= 0.92 or rank top match per invoice_id."
+              - generic [ref=f2e115]:
+                - generic [ref=f2e116]: "Autonomous Healing Correction Strategy:"
+                - text: "Interception active: Tightening jw_sim threshold to >= 0.92, restricting to vendor IFSC 'KVBL0001245', extracting 12-digit UTR via extract_utr(), and applying QUALIFY ROW_NUMBER() OVER (PARTITION BY b.ifsc_code ORDER BY sim_score DESC) = 1 to eliminate phonetic decoys."
+            - generic [ref=f2e117]:
+              - generic [ref=f2e118]:
+                - generic [ref=f2e119]: "Attempt 2: Healed multi-table reconciliation with CTE and jw_sim >= 0.92"
+                - generic [ref=f2e123]: Semantic Plane CTE
+              - generic [ref=f2e124]: WITH vendor_inv AS ( SELECT invoice_id, invoice_date, vendor_name, vendor_gstin, taxable_value, igst_amount, total_amount, vendor_ifsc, payout_status FROM tally_invoices WHERE invoice_id = 'INV-2026-104' ), bank_matches AS ( SELECT b.row_id, b.txn_date, b.narration, b.ifsc_code, b.withdrawal, b.deposit, extract_utr(b.narration) AS extracted_utr, jw_sim(b.narration, v.vendor_name) AS sim_score FROM bank_statement b CROSS JOIN vendor_inv v WHERE b.ifsc_code = v.vendor_ifsc AND jw_sim(b.narration, v.vendor_name) >= 0.92 QUALIFY ROW_NUMBER() OVER (PARTITION BY b.ifsc_code ORDER BY sim_score DESC) = 1 ), tax_status AS ( SELECT gstr2b_id, gstin_supplier, invoice_num, itc_eligible_amount, filing_status FROM gstr2b_tax WHERE invoice_num = 'INV-2026-104' ) SELECT v.*, b.row_id AS matched_bank_row, b.narration AS matched_narration, b.extracted_utr, b.sim_score, COALESCE(t.itc_eligible_amount, 0.0) AS itc_eligible, COALESCE(t.filing_status, 'NOT_FILED') AS tax_filing_status FROM vendor_inv v LEFT JOIN bank_matches b ON 1=1 LEFT JOIN tax_status t ON v.invoice_id = t.invoice_num;
+            - generic [ref=f2e126]:
+              - generic [ref=f2e127]: SQL Executed
+              - generic [ref=f2e136]:
+                - text: "Latency:"
+                - strong [ref=f2e137]: 67.18 ms
+              - generic [ref=f2e143]:
+                - text: "Rows Returned:"
+                - strong [ref=f2e144]: "1"
+            - generic [ref=f2e145]:
+              - generic [ref=f2e150]:
+                - text: "Citation Registered:"
+                - strong [ref=f2e151]: "[CIT-1]"
+                - text: · tally_invoices (INV-2026-104)
+              - generic [ref=f2e152]: IMMUTABLE
+            - generic [ref=f2e153]:
+              - generic [ref=f2e158]:
+                - text: "Citation Registered:"
+                - strong [ref=f2e159]: "[CIT-2]"
+                - text: · gstr2b_tax (INV-2026-104)
+              - generic [ref=f2e160]: IMMUTABLE
+            - generic [ref=f2e246]:
+              - generic [ref=f2e247]:
+                - generic [ref=f2e248]: "Live Bank Routing Header Verified: KVBL0001245"
+                - generic [ref=f2e253]: https://ifsc.razorpay.com
+              - generic [ref=f2e254]:
+                - generic [ref=f2e255]:
+                  - generic [ref=f2e256]: Bank
+                  - generic [ref=f2e257]: Karur Vysya Bank
+                - generic [ref=f2e258]:
+                  - generic [ref=f2e259]: Branch
+                  - generic [ref=f2e260]: SARAVANAMPATTI
+                - generic [ref=f2e261]:
+                  - generic [ref=f2e262]: City
+                  - text: COIMBATORE
+                - generic [ref=f2e263]:
+                  - generic [ref=f2e264]: UPI / RTGS
+                  - text: VERIFIED
+            - generic [ref=f2e265]:
+              - generic [ref=f2e270]:
+                - text: "Citation Registered:"
+                - strong [ref=f2e271]: "[CIT-3]"
+                - text: · bank_statement (BNK-3801)
+              - generic [ref=f2e272]: IMMUTABLE
+            - generic [ref=f2e273]:
+              - generic [ref=f2e278]:
+                - text: "Citation Registered:"
+                - strong [ref=f2e279]: "[ifsc_live#KVBL0001245]"
+                - text: · razorpay_ifsc (KVBL0001245)
+              - generic [ref=f2e280]: IMMUTABLE
+            - generic [ref=f2e281]:
+              - generic [ref=f2e286]:
+                - text: "Postal Jurisdiction: Pincode"
+                - strong [ref=f2e287]: "600053"
+                - text: (Tamil Nadu) matches GSTIN Prefix
+                - strong [ref=f2e288]: "33"
+              - generic [ref=f2e289]: VERIFIED_MATCH
+            - generic [ref=f2e290]:
+              - generic [ref=f2e295]:
+                - text: "Citation Registered:"
+                - strong [ref=f2e296]: "[pincode_live#600053]"
+                - text: · postal_pincode (600053)
+              - generic [ref=f2e297]: IMMUTABLE
+            - generic [ref=f2e298]:
+              - generic [ref=f2e299]:
+                - generic [ref=f2e300]: Retrieve current bank balance and upcoming critical loan EMI
+                - generic [ref=f2e304]: Semantic Plane CTE
+              - generic [ref=f2e305]: WITH latest_bal AS ( SELECT running_balance FROM bank_statement ORDER BY txn_date DESC, row_id DESC LIMIT 1 ), critical_emi AS ( SELECT amount, due_date, lender_or_payee FROM cashflow_commitments WHERE commitment_type = 'LOAN_EMI' AND priority = 'CRITICAL_DEFAULT_RISK' ORDER BY due_date ASC LIMIT 1 ) SELECT l.running_balance, c.amount AS emi_amount, c.due_date, c.lender_or_payee FROM latest_bal l CROSS JOIN critical_emi c;
+            - generic [ref=f2e307]:
+              - generic [ref=f2e312]:
+                - text: "Citation Registered:"
+                - strong [ref=f2e313]: "[CIT-4]"
+                - text: · cashflow_commitments (COM-001)
+              - generic [ref=f2e314]: IMMUTABLE
+          - generic [ref=f2e87]:
+            - generic [ref=f2e88]: "Engine: DuckDB v1.1.0 In-Memory Columnar Plane"
+            - generic [ref=f2e89]: Sub-50ms Guardrailed Execution
+        - generic [ref=f2e92]:
+          - generic [ref=f2e93]:
+            - generic [ref=f2e161]:
+              - generic [ref=f2e162]: "Reference: INV-2026-104"
+              - heading "Sri Balaji Enterprises GSTIN ITC Leakage & Debt Service Buffer" [level=2] [ref=f2e165]
+              - paragraph [ref=f2e166]:
+                - text: "Counterparty:"
+                - strong
+                - text: "· Disputed Amount:"
+                - strong [ref=f2e167]: ₹1,84,000.00
+            - generic [ref=f2e168]: BRIEF READY FOR DECISION
+          - generic [ref=f2e173]:
+            - generic [ref=f2e174]:
+              - generic [ref=f2e175]:
+                - generic [ref=f2e176]: Executive Decision Brief & Audit Memorandum
+                - generic [ref=f2e177]: "Deterministic Verification: 100% Provenance"
+              - generic [ref=f2e179]:
+                - text: "### Executive Reconciliation Brief: Sri Balaji Enterprises (`INV-2026-104`) #### 1. Discrepancy & Root Cause Analysis Vendor **Sri Balaji Enterprises** submitted invoice `INV-2026-104` totaling **₹1,84,000.00**"
+                - button "[CIT-1] Tally ERP" [ref=f2e317] [cursor=pointer]:
+                  - generic [ref=f2e322]: "[CIT-1]"
+                  - generic [ref=f2e323]: Tally ERP
+                - text: ". Audit cross-checks across the semantic plane and public verification APIs revealed the following financial risks: - **Statutory GST ITC Loss Risk**: Cross-referencing against the GSTN portal reveals this invoice has **NOT** been uploaded in GSTR-2B (`itc_eligible_amount = ₹0.00`)"
+                - button "[CIT-2] GSTR-2B Portal" [ref=f2e328] [cursor=pointer]:
+                  - generic [ref=f2e332]: "[CIT-2]"
+                  - generic [ref=f2e333]: GSTR-2B Portal
+                - text: ". Disbursing the full amount forfeits the SME's right to claim **₹28,067.80** in IGST under CGST Section 16(2)(aa) and Rule 36(4). - **Phonetic Decoy Filtering**: Bank statement narrations contain 8 decoy companies (e.g. `Balaji Traders`, `Sri Balaji Packaging`). A normalized Jaro-Winkler match of **0.987** against `KVBL0001245` correctly isolated the true transaction amidst noise"
+                - button "[CIT-3] HDFC/KVB Bank Statement" [ref=f2e338] [cursor=pointer]:
+                  - generic [ref=f2e342]: "[CIT-3]"
+                  - generic [ref=f2e343]: HDFC/KVB Bank Statement
+                - text: ". - **Live KYC & Route Verification**: Beneficiary IFSC `KVBL0001245` confirmed active under Karur Vysya Bank"
+                - button "[ifsc_live#KVBL0001245] Live IFSC API" [ref=f2e348] [cursor=pointer]:
+                  - generic [ref=f2e354]: "[ifsc_live#KVBL0001245]"
+                  - generic [ref=f2e355]: Live IFSC API
+                - text: ". India Post jurisdiction check verified postal code `600053` matches GSTIN State Code `33`"
+                - button "[pincode_live#600053] India Post API" [ref=f2e360] [cursor=pointer]:
+                  - generic [ref=f2e364]: "[pincode_live#600053]"
+                  - generic [ref=f2e365]: India Post API
+                - text: ". #### 2. Deterministic Cash-Flow & EMI Runway Impact - **Current Operating Bank Balance**: ₹3,10,000.00"
+                - button "[CIT-4] EMI Commitments" [ref=f2e370] [cursor=pointer]:
+                  - generic [ref=f2e374]: "[CIT-4]"
+                  - generic [ref=f2e375]: EMI Commitments
+                - text: "- **Upcoming 7-Day Critical Loan EMI**: ₹1,10,000.00 (*HDFC Business Loan*)"
+                - button "[CIT-4] EMI Commitments" [ref=f2e380] [cursor=pointer]:
+                  - generic [ref=f2e384]: "[CIT-4]"
+                  - generic [ref=f2e385]: EMI Commitments
+                - text: "- **Scenario A (Unmitigated Full Payout of ₹1,84,000.00)**: - Cash remaining after payout: **₹1,26,000.00** - Post-EMI free cash buffer: **₹16,000.00** (Debt service coverage ratio drops to **1.15x**, triggering `CRITICAL_DEFAULT_RISK` under company liquidity policy). - **Scenario B (Praman Action: Withhold Unfiled GST Portion of ₹28,067.80)**: - Cash remaining after net payout: **₹1,54,067.80** - Post-EMI free cash buffer: **₹44,067.80** (Debt service coverage ratio safely preserved at **1.40x**). - **Scenario C (Conservative Hold of Full ₹1,84,000.00 pending GSTR-2B filing)**: - Preserves **₹3,10,000.00** operating cash flow (**₹2,00,000.00** free cash post-EMI, **2.82x** coverage). #### 3. Prescribed Actions 1. **Apply Statutory Payout Hold**: Place invoice `INV-2026-104` on hold for **₹28,067.80** (or full ₹1,84,000.00 pending vendor GSTR-1 upload). 2. **Issue Automated Supplier Notice**: Dispatch GST compliance reminder to Sri Balaji Enterprises (`33AABCS1429B1Z2`). 3. **Ring-Fence Loan EMI**: Lock ₹1,10,000.00 in the primary clearing account for HDFC Business Loan EMI due in 7 days."
+            - generic [ref=f2e182]:
+              - generic [ref=f2e183]:
+                - generic [ref=f2e189]:
+                  - heading "30-Day Liquidity & Critical Loan EMI Runway" [level=4] [ref=f2e190]
+                  - paragraph [ref=f2e191]: Mathematical cash-flow protection against HDFC Business Loan default
+                - generic [ref=f2e192]:
+                  - generic [ref=f2e193]:
+                    - text: "Current Bank Balance:"
+                    - strong [ref=f2e194]: ₹3,10,000
+                  - generic [ref=f2e195]: "Upcoming EMI (7d): ₹1,10,000"
+              - generic [ref=f2e196]:
+                - img [ref=f2e200]:
+                  - generic [ref=f2e202]:
+                    - generic [ref=f2e203]: Unprotected Payout (Risk)
+                    - generic [ref=f2e205]: Praman Recommended (Protected)
+                  - generic [ref=f2e208]:
+                    - generic [ref=f2e209]: ₹0k
+                    - generic [ref=f2e211]: ₹55k
+                    - generic [ref=f2e213]: ₹110k
+                    - generic [ref=f2e215]: ₹165k
+                    - generic [ref=f2e217]: ₹220k
+                  - generic [ref=f2e219]: "CRITICAL EMI: ₹1,10,000"
+                - generic [ref=f2e227]:
+                  - generic [ref=f2e228]:
+                    - generic [ref=f2e229]:
+                      - generic [ref=f2e230]: Unprotected Full Payout
+                      - generic [ref=f2e233]: 1.15x Coverage
+                    - generic [ref=f2e234]:
+                      - text: Disbursing full ₹1,84,000 leaves only
+                      - strong [ref=f2e235]: ₹16,000
+                      - text: post-EMI free buffer, dangerously violating debt service liquidity policy.
+                  - generic [ref=f2e236]:
+                    - generic [ref=f2e237]:
+                      - generic [ref=f2e238]: Praman Protected Action
+                      - generic [ref=f2e242]: 1.40x Coverage
+                    - generic [ref=f2e243]:
+                      - text: Withholding unfiled GST (₹28,067.80) preserves
+                      - strong [ref=f2e244]: ₹44,068
+                      - text: post-EMI cushion, keeping the SME debt safe.
+            - generic [ref=f2e390]:
+              - generic [ref=f2e391]:
+                - generic [ref=f2e392]:
+                  - heading "Prescribed Downstream Resolution Actions" [level=4] [ref=f2e393]
+                  - paragraph [ref=f2e394]: Deterministic remediation steps pending Human Finance Controller approval
+                - button "Approve & Execute Resolution" [ref=f2e395] [cursor=pointer]
+              - generic [ref=f2e402]:
+                - generic [ref=f2e403]:
+                  - generic [ref=f2e404]:
+                    - generic [ref=f2e405]: Step 1
+                    - generic [ref=f2e406]: HOLD_PAYOUT_PARTIAL
+                  - paragraph [ref=f2e407]: "Amount: ₹28,067.80"
+                  - generic [ref=f2e408]: "Target: GST_PORTION"
+                - generic [ref=f2e409]:
+                  - generic [ref=f2e410]:
+                    - generic [ref=f2e411]: Step 2
+                    - generic [ref=f2e412]: NOTIFY_VENDOR_GSTIN
+                  - paragraph [ref=f2e413]: RULE_36_4_ITC_UNAVAILABLE
+                - generic [ref=f2e414]:
+                  - generic [ref=f2e415]:
+                    - generic [ref=f2e416]: Step 3
+                    - generic [ref=f2e417]: RINGFENCE_LIQUIDITY
+                  - paragraph [ref=f2e418]: "Amount: ₹1,10,000.00"
+  - generic [aria-hidden] [ref=f2e245]: ₹0k

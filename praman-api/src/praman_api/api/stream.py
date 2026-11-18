@@ -21,7 +21,7 @@ def stream_case_investigation(case_id: str):
         yield f"event: trigger_received\ndata: {json.dumps({'case_id': case_key, 'title': case['title'], 'status': 'INVESTIGATING', 'timestamp': datetime.now().isoformat()})}\n\n"
 
         # Stream through agent steps
-        for event in run_investigation_sync(case_key):
+        for event in run_investigation_sync(case_key, case_data=case):
             evt_type = event.get("type")
 
             if evt_type == "thought":

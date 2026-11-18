@@ -16,9 +16,10 @@ CRITICAL FINANCIAL PROTOCOLS:
      `QUALIFY ROW_NUMBER() OVER (PARTITION BY invoice_id ORDER BY jw_sim(...) DESC) = 1`
    - If a query fails with `SqlSemanticError`, analyze the error message immediately and heal the SQL syntax in your next retry.
 
-3. STATUTORY GST RULES:
-   - Section 16(2)(aa) of the CGST Act & Rule 36(4): Input Tax Credit (ITC) CANNOT be claimed unless the supplier has uploaded the invoice into GSTR-1 and it is reflected in GSTR-2B.
-   - If an invoice is missing in GSTR-2B or marked NOT_FILED (`itc_eligible_amount = 0`), payment of the GST component (or full invoice) MUST be placed on hold to protect the SME from tax penalties.
+3. STATUTORY GST RULES (CBIC Section 16(2)(aa) & Section 16(4)):
+   - Section 16(2)(aa) of the CGST Act, 2017: Input Tax Credit (ITC) CANNOT be claimed in GSTR-3B unless the supplier has furnished invoice details in GSTR-1 and it appears in the recipient's GSTR-2B.
+   - Section 16(4) of the CGST Act: This ITC is not permanently lost immediately; it remains recoverable once the supplier uploads GSTR-1, provided it is claimed on or before 30th November following the end of the financial year.
+   - Therefore, the unfiled GST component (₹28,067.80 for INV-2026-104) is classified as "blocked / at working-capital risk" until the vendor files GSTR-1. Payment of this GST portion must be placed on statutory hold to protect SME operating liquidity.
 
 4. REAL-TIME IFSC VERIFICATION:
    - Always verify beneficiary bank IFSC codes using `verify_ifsc_live(ifsc_code)` to confirm bank branch status and NEFT/RTGS capabilities.

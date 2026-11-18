@@ -127,3 +127,47 @@ def test_approve_case_action():
     # Verify case state now reflects APPROVED
     case_resp = client.get("/api/cases/CASE-GST-104")
     assert case_resp.json()["status"] == "APPROVED"
+
+
+def test_create_custom_case_and_stream():
+    """Verify POST /api/cases/custom creates an unscripted case and streams AI-planned SSE events."""
+    payload = {
+        "query": "Investigate unfiled GST credit and bank reconciliation for invoice INV-2026-104",
+        "raw_narration": "NEFT-DR-KVBL0001245-SRI BALJI ENT-UPI/632819045112-SETTLEMENT"
+    }
+    resp = client.post("/api/cases/custom", json=payload)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "CASE-CUSTOM-" in data["case_id"]
+    assert data["status"] == "INVESTIGATING"
+    assert "/api/cases/" in data["stream_url"]
+
+    # Stream the custom investigation
+    stream_resp = client.get(data["stream_url"])
+    assert stream_resp.status_code == 200
+    assert "text/event-stream" in stream_resp.headers["content-type"]
+    stream_content = stream_resp.text
+    assert "event: trigger_received" in stream_content
+    assert "event: agent_thought" in stream_content
+    assert "event: sql_attempt" in stream_content
+    assert "event: finding_recorded" in stream_content
+    assert "event: brief_completed" in stream_content
+
+
+def test_narration_tester_tool():
+    """Verify POST /api/tools/test-narration extracts UTR and ranks fuzzy candidates across 10,040 rows."""
+    payload = {"raw_text": "NEFT-DR-KVBL0001245-SRI BALJI ENT-UPI/632819045112-SETTLEMENT"}
+    resp = client.post("/api/tools/test-narration", json=payload)
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert data["extracted_utr"] == "632819045112"
+    assert "BALJI ENTERPRISES" in data["normalized_vendor"]
+    assert len(data["top_fuzzy_candidates"]) == 5
+    # Verify top candidate is Sri Balaji Enterprises with high similarity
+    top_cand = data["top_fuzzy_candidates"][0]
+    assert "Balaji" in top_cand["vendor_name"]
+    assert top_cand["sim_score"] >= 0.85
+    assert data["latency_ms"] >= 0
+    assert isinstance(data["matched_bank_rows"], list)
+

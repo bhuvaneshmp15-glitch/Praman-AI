@@ -38,7 +38,7 @@ export const DemoTriggerMenu: React.FC<DemoTriggerMenuProps> = ({
       id: 'CASE-SLA-302',
       badge: 'Scenario 3',
       title: 'B2B SLA Downtime Pro-Rata Credit',
-      detail: '₹84,000 → ₹5,600 Credit',
+      detail: '₹84,000 -> ₹5,600',
       color: 'border-emerald-700/30 bg-emerald-50 hover:bg-emerald-100 text-emerald-900',
       activeColor: 'border-emerald-600 bg-emerald-100 text-emerald-950 ring-1 ring-emerald-600',
       icon: Zap,

@@ -1,10 +1,11 @@
 """Praman API - Cases Router.
 Manages listing, triggering, and state transitions of reconciliation discrepancy cases.
 """
+import uuid
 from fastapi import APIRouter, HTTPException
 from typing import List, Dict, Any, Optional
 
-from praman_api.models import DiscrepancyCase, TriggerCaseResponse
+from praman_api.models import DiscrepancyCase, TriggerCaseResponse, CustomCaseRequest
 
 router = APIRouter(prefix="/cases", tags=["cases"])
 
@@ -148,3 +149,36 @@ def trigger_case(scenario_id: str):
         message=f"Investigation workflow initialized for {target_case['case_id']}.",
         case=DiscrepancyCase(**target_case)
     )
+
+
+@router.post("/custom", response_model=Dict[str, Any])
+def create_custom_case(payload: CustomCaseRequest):
+    """Accepts unscripted natural language query & raw bank narration for autonomous investigation."""
+    case_uid = f"CASE-CUSTOM-{uuid.uuid4().hex[:6].upper()}"
+    target_case = {
+        "case_id": case_uid,
+        "title": f"Custom Investigation: {payload.query[:60]}",
+        "category": "CUSTOM_QUERY",
+        "severity": "HIGH",
+        "status": "INVESTIGATING",
+        "amount_at_risk": 50000.00,
+        "invoice_or_ref_id": case_uid,
+        "description": payload.query,
+        "scenario_metadata": {
+            "custom_query": payload.query,
+            "raw_narration": payload.raw_narration,
+            "vendor_ifsc": "HDFC0000240"
+        },
+        "citations": [],
+        "actions": []
+    }
+    CASE_STORE[case_uid] = target_case
+
+    return {
+        "case_id": case_uid,
+        "status": "INVESTIGATING",
+        "message": f"Autonomous custom investigation workflow initialized for {case_uid}.",
+        "stream_url": f"/api/cases/{case_uid}/stream",
+        "case": target_case
+    }
+

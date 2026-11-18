@@ -1,0 +1,51 @@
+- generic [ref=f2e3]:
+  - banner [ref=f2e4]:
+    - generic [ref=f2e5]:
+      - generic [ref=f2e6]:
+        - generic [ref=f2e7]: प्र
+        - generic [ref=f2e8]:
+          - generic [ref=f2e9]:
+            - generic [ref=f2e10]: Praman
+            - generic [ref=f2e11]: Autonomous Copilot
+          - paragraph [ref=f2e12]: Autonomous B2B Financial Reconciliation & Cash-Flow Protection Engine
+      - generic [ref=f2e13]:
+        - generic [ref=f2e21]: "DuckDB Semantic Engine:"
+        - generic [ref=f2e22]: 10,040 Rows Indexed
+        - generic [ref=f2e23]: "|"
+        - generic [ref=f2e27]: 4 Indic/Financial UDFs Active
+    - generic [ref=f2e29]:
+      - generic [ref=f2e30]: "1-Click Judge Scenarios:"
+      - generic [ref=f2e32]:
+        - button "Scenario 1 Missing GSTR-2B ITC Hold ₹1,84,000 · Sri Balaji Ent" [ref=f2e33] [cursor=pointer]:
+          - generic [ref=f2e36]:
+            - generic [ref=f2e37]:
+              - generic [ref=f2e38]: Scenario 1
+              - generic [ref=f2e39]: Missing GSTR-2B ITC Hold
+            - generic [ref=f2e40]: ₹1,84,000 · Sri Balaji Ent
+        - button "Scenario 2 UPI Switch Double-Debit Dispute ₹14,500 · RRN Proof" [ref=f2e44] [cursor=pointer]:
+          - generic [ref=f2e50]:
+            - generic [ref=f2e51]:
+              - generic [ref=f2e52]: Scenario 2
+              - generic [ref=f2e53]: UPI Switch Double-Debit Dispute
+            - generic [ref=f2e54]: ₹14,500 · RRN Proof
+        - button "Scenario 3 B2B SLA Downtime Pro-Rata Credit ₹84,000 -> ₹5,600" [ref=f2e55] [cursor=pointer]:
+          - generic [ref=f2e58]:
+            - generic [ref=f2e59]:
+              - generic [ref=f2e60]: Scenario 3
+              - generic [ref=f2e61]: B2B SLA Downtime Pro-Rata Credit
+            - generic [ref=f2e62]: ₹84,000 -> ₹5,600
+  - main [ref=f2e63]:
+    - generic [ref=f2e64]:
+      - generic [ref=f2e66]:
+        - generic [ref=f2e67]:
+          - generic [ref=f2e68]: praman-duckdb-plane://semantic-trace
+          - generic [ref=f2e76]: Semantic Plane Standby
+        - generic [ref=f2e81]:
+          - paragraph [ref=f2e85]: Awaiting Scenario Trigger...
+          - paragraph [ref=f2e86]: Click any 1-Click Judge Scenario above to observe live SQL queries, UDF executions, and guardrails.
+        - generic [ref=f2e87]:
+          - generic [ref=f2e88]: "Engine: DuckDB v1.1.0 In-Memory Columnar Plane"
+          - generic [ref=f2e89]: Sub-50ms Guardrailed Execution
+      - generic [ref=f2e92]:
+        - heading "No Discrepancy Investigation Loaded" [level=3] [ref=f2e97]
+        - paragraph [ref=f2e98]: Select one of the 1-click judge scenarios above to trigger autonomous cross-ledger reconciliation.

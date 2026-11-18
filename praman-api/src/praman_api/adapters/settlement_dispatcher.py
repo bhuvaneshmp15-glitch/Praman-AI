@@ -70,46 +70,49 @@ class SettlementDispatcher:
         notes: str
     ) -> Dict[str, Any]:
         """Applies ledger modifications and appends to audit_trail in DuckDB."""
-        conn = db_plane.connect()
+        conn = db_plane.connect(read_only=False)
         ref_id = case_data.get("invoice_or_ref_id", "")
         updated_rows = 0
 
-        # Create audit trail table if not exists
-        conn.execute("""
-        CREATE TABLE IF NOT EXISTS audit_trail (
-            audit_id VARCHAR,
-            case_id VARCHAR,
-            action VARCHAR,
-            status VARCHAR,
-            idempotency_key VARCHAR,
-            external_ref VARCHAR,
-            timestamp VARCHAR,
-            operator VARCHAR,
-            details VARCHAR
-        );
-        """)
+        try:
+            # Create audit trail table if not exists
+            conn.execute("""
+            CREATE TABLE IF NOT EXISTS audit_trail (
+                audit_id VARCHAR,
+                case_id VARCHAR,
+                action VARCHAR,
+                status VARCHAR,
+                idempotency_key VARCHAR,
+                external_ref VARCHAR,
+                timestamp VARCHAR,
+                operator VARCHAR,
+                details VARCHAR
+            );
+            """)
 
-        # Execute specific ledger updates based on case
-        if "104" in case_id or "GST" in case_id:
-            conn.execute(f"UPDATE tally_invoices SET payout_status = 'ON_HOLD' WHERE invoice_id = '{ref_id}'")
-            updated_rows = 1
-        elif "209" in case_id or "UPI" in case_id:
-            conn.execute("UPDATE razorpay_upi SET status = 'chargeback_rejected_switch_fail' WHERE rrn_utr = '432910485711'")
-            updated_rows = 1
-        elif "881" in case_id or "SLA" in case_id:
-            conn.execute(f"UPDATE tally_invoices SET payout_status = 'APPROVED_NET_SLA' WHERE invoice_id = '{ref_id}'")
-            updated_rows = 1
-        elif "404" in case_id or "DUP" in case_id:
-            conn.execute(f"UPDATE tally_invoices SET payout_status = 'PAID' WHERE invoice_id = '{ref_id}'")
-            updated_rows = 1
+            # Execute specific ledger updates based on case
+            if "104" in case_id or "GST" in case_id:
+                conn.execute(f"UPDATE tally_invoices SET payout_status = 'ON_HOLD' WHERE invoice_id = '{ref_id}'")
+                updated_rows = 1
+            elif "209" in case_id or "UPI" in case_id:
+                conn.execute("UPDATE razorpay_upi SET status = 'chargeback_rejected_switch_fail' WHERE rrn_utr = '432910485711'")
+                updated_rows = 1
+            elif "881" in case_id or "SLA" in case_id:
+                conn.execute(f"UPDATE tally_invoices SET payout_status = 'APPROVED_NET_SLA' WHERE invoice_id = '{ref_id}'")
+                updated_rows = 1
+            elif "404" in case_id or "DUP" in case_id:
+                conn.execute(f"UPDATE tally_invoices SET payout_status = 'PAID' WHERE invoice_id = '{ref_id}'")
+                updated_rows = 1
 
-        # Append immutable audit entry
-        audit_id = f"AUD-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        now_str = datetime.now().isoformat()
-        conn.execute(
-            "INSERT INTO audit_trail VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            [audit_id, case_id, "ACTION_APPROVED", "EXECUTED", idempotency_key, external_ref, now_str, notes, f"Updated ledger row for {ref_id}"]
-        )
+            # Append immutable audit entry
+            audit_id = f"AUD-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            now_str = datetime.now().isoformat()
+            conn.execute(
+                "INSERT INTO audit_trail VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [audit_id, case_id, "ACTION_APPROVED", "EXECUTED", idempotency_key, external_ref, now_str, notes, f"Updated ledger row for {ref_id}"]
+            )
+        finally:
+            conn.close()
 
         return {
             "target_table": "tally_invoices" if "UPI" not in case_id else "razorpay_upi",
@@ -144,8 +147,8 @@ class SettlementDispatcher:
     <li>Taxable Goods/Services: ₹1,55,932.20</li>
     <li>Withheld IGST Component: <strong>₹28,067.80</strong></li>
   </ul>
-  <p><strong>Reason:</strong> Under Section 16(2)(aa) of the CGST Act and Rule 36(4), Input Tax Credit cannot be availed by the recipient until the supplier reflects the invoice in GSTR-1 and it auto-populates in our GSTR-2B. Currently, invoice INV-2026-104 is unfiled.</p>
-  <p>The balance ₹28,067.80 will be released immediately upon verification of filing in GSTR-2B.</p>
+  <p><strong>Reason:</strong> Under Section 16(2)(aa) of the CGST Act, 2017, Input Tax Credit (ITC) is legally inadmissible in GSTR-3B unless the invoice is furnished by the supplier in GSTR-1 and auto-reflected in GSTR-2B. Currently, invoice INV-2026-104 is missing from GSTR-2B, putting ₹28,067.80 of working capital at risk. Under Section 16(4), this ITC is recoverable once furnished on or before 30th November following the end of the financial year.</p>
+  <p>The held ₹28,067.80 will be released immediately upon verification of upload in GSTR-2B.</p>
 </div>
 </body></html>"""
 

@@ -61,3 +61,30 @@ class ActionApprovalResponse(BaseModel):
     db_update_result: Dict[str, Any]
     audit_trail_entry: Dict[str, Any]
     executed_at: str
+
+
+class CustomCaseRequest(BaseModel):
+    query: str
+    raw_narration: Optional[str] = None
+
+
+class TestNarrationRequest(BaseModel):
+    raw_text: str
+
+
+class FuzzyCandidate(BaseModel):
+    vendor_name: str
+    vendor_gstin: Optional[str] = None
+    sim_score: float
+
+
+class TestNarrationResponse(BaseModel):
+    raw_text: str
+    extracted_utr: str
+    normalized_vendor: str
+    top_fuzzy_candidates: List[Dict[str, Any]]
+    matched_gstr2b: List[Dict[str, Any]]
+    matched_tally: List[Dict[str, Any]]
+    matched_bank_rows: List[Dict[str, Any]]
+    latency_ms: float
+

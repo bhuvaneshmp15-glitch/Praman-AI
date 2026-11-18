@@ -73,8 +73,11 @@ export function subscribeToCaseStream(
       try {
         const parsed = JSON.parse(e.data);
         onEvent(evt, parsed);
-        if (evt === 'brief_completed' && onComplete) {
-          onComplete();
+        if (evt === 'brief_completed') {
+          if (onComplete) {
+            onComplete();
+          }
+          eventSource.close();
         }
       } catch (err) {
         console.error(`Failed to parse SSE ${evt}:`, err);
@@ -83,8 +86,11 @@ export function subscribeToCaseStream(
   });
 
   eventSource.onerror = (err) => {
-    if (onError) onError(err);
+    if (eventSource.readyState === EventSource.CLOSED) {
+      return;
+    }
     eventSource.close();
+    if (onError) onError(err);
   };
 
   return () => {

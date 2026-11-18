@@ -144,3 +144,25 @@ def test_investigation_stream_case_sla_302():
     assert "₹78,400.00" in brief
     assert "[CIT-1]" in brief
     assert "[CIT-2]" in brief
+
+
+def test_investigation_stream_custom_case():
+    """Verify AI-planned neuro-symbolic investigation for custom case."""
+    case_data = {
+        "case_id": "CASE-CUSTOM-XYZ",
+        "description": "Investigate unfiled GST credit for invoice INV-2026-104",
+        "scenario_metadata": {
+            "custom_query": "Investigate unfiled GST credit for invoice INV-2026-104",
+            "raw_narration": "NEFT-DR-KVBL0001245-SRI BALJI ENT-UPI/632819045112-SETTLEMENT"
+        }
+    }
+    events = list(run_investigation_sync("CASE-CUSTOM-XYZ", case_data=case_data))
+
+    verdicts = [e for e in events if e.get("type") == "verdict"]
+    assert len(verdicts) == 1
+    vdata = verdicts[0]["data"]
+    assert vdata["decision"] == "HOLD_DISPUTED_PAYOUT"
+    assert "[CIT-1]" in vdata["markdown_brief"]
+    assert "[CIT-2]" in vdata["markdown_brief"]
+    assert "Neuro-Symbolic" in vdata["markdown_brief"]
+

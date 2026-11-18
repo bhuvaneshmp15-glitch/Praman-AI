@@ -152,6 +152,18 @@ def patch_all_scenarios(
     )
     df_policies.loc[0, "section_ref"] = "SEC-4.2"
 
+    # Update POL-003 to accurately reflect CGST Section 16(2)(aa) and Section 16(4)
+    pol3_idx = df_policies.index[df_policies["policy_id"] == "POL-003"]
+    if len(pol3_idx) > 0:
+        p3 = pol3_idx[0]
+        df_policies.loc[p3, "title"] = "CGST Section 16(2)(aa) & Section 16(4) Mandatory ITC Matching Policy"
+        df_policies.loc[p3, "rule_body"] = (
+            "Under Section 16(2)(aa) of the CGST Act 2017, Input Tax Credit cannot be availed in GSTR-3B unless reflected in GSTR-2B. "
+            "Vendor invoices lacking matching entries in GSTR-2B must have their GST portion placed on statutory payment hold "
+            "(blocked working-capital risk) until the supplier furnishes GSTR-1. Credit remains recoverable under Section 16(4) "
+            "if claimed on or before 30th November following the end of the financial year."
+        )
+
     # =========================================================================
     # CASE 4 (CASE-DUP-404): Duplicate Disbursement Risk via Split Bank Transfers
     # =========================================================================

@@ -3,6 +3,7 @@ High-performance OLAP query execution engine with registered semantic UDFs and f
 """
 import re
 import time
+import threading
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 import duckdb
@@ -28,7 +29,8 @@ class DuckDBPlane:
 
     def __init__(self, db_path: Optional[str] = None):
         self.db_path = Path(db_path or settings.DUCKDB_PATH)
-        self.conn: Optional[duckdb.DuckDBPyConnection] = None
+        self._main_conn: Optional[duckdb.DuckDBPyConnection] = None
+        self._local = threading.local()
         self._ensure_database_exists()
 
     def _ensure_database_exists(self):
@@ -61,22 +63,31 @@ class DuckDBPlane:
                 )
         conn.close()
 
-    def connect(self) -> duckdb.DuckDBPyConnection:
-        """Returns active connection with all 4 semantic UDFs registered."""
-        if self.conn is None:
-            self.conn = duckdb.connect(str(self.db_path))
-            self._register_udfs()
-        return self.conn
+    @property
+    def conn(self) -> duckdb.DuckDBPyConnection:
+        return self.connect()
 
-    def _register_udfs(self):
+    def _get_main_conn(self) -> duckdb.DuckDBPyConnection:
+        if self._main_conn is None:
+            self._main_conn = duckdb.connect(str(self.db_path), read_only=False)
+            self._register_udfs(self._main_conn)
+        return self._main_conn
+
+    def connect(self, read_only: bool = False) -> duckdb.DuckDBPyConnection:
+        """Returns thread-isolated DuckDB cursor with all 4 semantic UDFs registered."""
+        main_conn = self._get_main_conn()
+        if not hasattr(self._local, "cursor") or self._local.cursor is None:
+            self._local.cursor = main_conn.cursor()
+        return self._local.cursor
+
+    def _register_udfs(self, conn: duckdb.DuckDBPyConnection):
         """Registers the 4 pure Python UDFs into the DuckDB catalog."""
         try:
-            self.conn.create_function("extract_utr", extract_utr)
-            self.conn.create_function("norm_indic_vendor", norm_indic_vendor)
-            self.conn.create_function("jw_sim", jw_sim)
-            self.conn.create_function("validate_gstin_checksum", validate_gstin_checksum)
-        except Exception as e:
-            # Functions might already be registered in this connection session
+            conn.create_function("extract_utr", extract_utr)
+            conn.create_function("norm_indic_vendor", norm_indic_vendor)
+            conn.create_function("jw_sim", jw_sim)
+            conn.create_function("validate_gstin_checksum", validate_gstin_checksum)
+        except Exception:
             pass
 
     def execute_query(self, sql: str) -> Dict[str, Any]:
@@ -166,9 +177,18 @@ class DuckDBPlane:
 
     def close(self):
         """Closes active DuckDB connection."""
-        if self.conn:
-            self.conn.close()
-            self.conn = None
+        if hasattr(self._local, "cursor") and self._local.cursor:
+            try:
+                self._local.cursor.close()
+            except Exception:
+                pass
+            self._local.cursor = None
+        if self._main_conn:
+            try:
+                self._main_conn.close()
+            except Exception:
+                pass
+            self._main_conn = None
 
 
 db_plane = DuckDBPlane()

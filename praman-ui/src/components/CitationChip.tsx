@@ -63,7 +63,7 @@ export const CitationChip: React.FC<CitationChipProps> = ({
         };
       case 'bank_statement':
         return {
-          label: 'Bank Statement',
+          label: 'HDFC/KVB Bank Statement',
           bg: 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100',
           dot: 'bg-emerald-500',
           icon: Landmark,

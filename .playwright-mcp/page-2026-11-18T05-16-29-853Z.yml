@@ -1,0 +1,51 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - generic [ref=e7]: प्र
+        - generic [ref=e8]:
+          - generic [ref=e9]:
+            - generic [ref=e10]: Praman
+            - generic [ref=e11]: Autonomous Copilot
+          - paragraph [ref=e12]: Autonomous B2B Financial Reconciliation & Cash-Flow Protection Engine
+      - generic [ref=e13]:
+        - generic [ref=e21]: "DuckDB Semantic Engine:"
+        - generic [ref=e22]: 10,040 Rows Indexed
+        - generic [ref=e23]: "|"
+        - generic [ref=e27]: 4 Indic/Financial UDFs Active
+    - generic [ref=e29]:
+      - generic [ref=e30]: "1-Click Judge Scenarios:"
+      - generic [ref=e32]:
+        - button "Scenario 1 Missing GSTR-2B ITC Hold ₹1,84,000 · Sri Balaji Ent" [ref=e33] [cursor=pointer]:
+          - generic [ref=e36]:
+            - generic [ref=e37]:
+              - generic [ref=e38]: Scenario 1
+              - generic [ref=e39]: Missing GSTR-2B ITC Hold
+            - generic [ref=e40]: ₹1,84,000 · Sri Balaji Ent
+        - button "Scenario 2 UPI Switch Double-Debit Dispute ₹14,500 · RRN Proof" [ref=e44] [cursor=pointer]:
+          - generic [ref=e50]:
+            - generic [ref=e51]:
+              - generic [ref=e52]: Scenario 2
+              - generic [ref=e53]: UPI Switch Double-Debit Dispute
+            - generic [ref=e54]: ₹14,500 · RRN Proof
+        - button "Scenario 3 B2B SLA Downtime Pro-Rata Credit ₹84,000 -> ₹5,600" [ref=e55] [cursor=pointer]:
+          - generic [ref=e58]:
+            - generic [ref=e59]:
+              - generic [ref=e60]: Scenario 3
+              - generic [ref=e61]: B2B SLA Downtime Pro-Rata Credit
+            - generic [ref=e62]: ₹84,000 -> ₹5,600
+  - main [ref=e63]:
+    - generic [ref=e64]:
+      - generic [ref=e66]:
+        - generic [ref=e67]:
+          - generic [ref=e68]: praman-duckdb-plane://semantic-trace
+          - generic [ref=e76]: Semantic Plane Standby
+        - generic [ref=e81]:
+          - paragraph [ref=e85]: Awaiting Scenario Trigger...
+          - paragraph [ref=e86]: Click any 1-Click Judge Scenario above to observe live SQL queries, UDF executions, and guardrails.
+        - generic [ref=e87]:
+          - generic [ref=e88]: "Engine: DuckDB v1.1.0 In-Memory Columnar Plane"
+          - generic [ref=e89]: Sub-50ms Guardrailed Execution
+      - generic [ref=e92]:
+        - heading "No Discrepancy Investigation Loaded" [level=3] [ref=e97]
+        - paragraph [ref=e98]: Select one of the 1-click judge scenarios above to trigger autonomous cross-ledger reconciliation.
