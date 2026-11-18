@@ -37,6 +37,32 @@ praman-copilot/
 ## 🚀 Key Capabilities
 
 1. **Jaro-Winkler & GSTIN Multi-Pass Reconciliation**: Reconciles noisy bank narrations against Tally vendors and GSTR-2B input tax credits while filtering out phonetic decoys.
-2. **Cashflow Protection & EMI Safeguards**: Computes real-time liquidity runways, safeguarding upcoming high-priority commitments (e.g. loan EMIs, payroll, GST challans) before approving vendor payouts.
+2. **Deterministic Cashflow Protection & EMI Safeguards**: Computes real-time liquidity runways, safeguarding upcoming high-priority commitments (e.g. ₹1,10,000 HDFC loan EMI) before approving vendor payouts.
 3. **UPI Switch Failure Discrepancy Resolution**: Tracks payment gateway double-debits, distinguishing between bank switch failures and captured settlements.
 4. **Autonomous Evidence-Backed Audit Trails**: Produces deterministic citations with exact row IDs across DuckDB queries and ledger sources.
+5. **Zero-Key Public API Integration**: 4 live, keyless public APIs (`https://ifsc.razorpay.com`, `api.postalpincode.in`, `api.frankfurter.app`, and `api.xposedornot.com`) with 3s timeout and offline fallback caches.
+
+---
+
+## 💻 Running the Monorepo
+
+### 1. Backend (FastAPI + DuckDB)
+```powershell
+cd praman-api
+pip install -r requirements.txt
+$env:PYTHONPATH="src"
+python -m uvicorn praman_api.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+### 2. Frontend (React + TypeScript + Vite + Tailwind CSS)
+```powershell
+cd praman-ui
+npm install
+npm run dev
+```
+Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+### 3. Run Backend Test Suite
+```powershell
+$env:PYTHONPATH="praman-api/src"; python -m pytest praman-api/tests/ -v
+```

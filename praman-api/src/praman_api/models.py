@@ -1,71 +1,16 @@
+"""Praman API Data Models and Schemas."""
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from datetime import date, datetime
 
 
-class BankStatementRow(BaseModel):
-    row_id: str
-    txn_date: date
-    narration: str
-    withdrawal: float = 0.0
-    deposit: float = 0.0
-    running_balance: float
-    ifsc_code: str
-
-
-class RazorpayUPIRow(BaseModel):
-    payment_id: str
-    order_id: str
-    created_at: datetime
-    gross_amount: float
-    mdr_fee: float
-    gst_on_fee: float
-    net_settlement: float
+class HealthResponse(BaseModel):
     status: str
-    rrn_utr: str
-    customer_vpa: str
-
-
-class TallyInvoiceRow(BaseModel):
-    invoice_id: str
-    invoice_date: date
-    vendor_name: str
-    vendor_gstin: str
-    taxable_value: float
-    cgst_amount: float
-    sgst_amount: float
-    igst_amount: float
-    total_amount: float
-    payout_status: str
-    vendor_ifsc: str
-
-
-class GSTR2BRow(BaseModel):
-    gstr2b_id: str
-    gstin_supplier: str
-    legal_trade_name: str
-    invoice_num: str
-    filing_period: str
-    taxable_val: float
-    itc_eligible_amount: float
-    filing_status: str
-
-
-class CashflowCommitmentRow(BaseModel):
-    commitment_id: str
-    commitment_type: str
-    lender_or_payee: str
-    due_date: date
-    amount: float
-    priority: str
-
-
-class CompanyPolicyRow(BaseModel):
-    policy_id: str
-    domain: str
-    title: str
-    rule_body: str
-    section_ref: str
+    environment: str
+    database: str
+    total_rows: int
+    table_counts: Dict[str, int]
+    registered_udfs: List[str]
 
 
 class DiscrepancyCase(BaseModel):
@@ -73,8 +18,46 @@ class DiscrepancyCase(BaseModel):
     title: str
     category: str
     severity: str
+    status: str = "TRIGGERED"  # TRIGGERED, INVESTIGATING, BRIEF_READY, APPROVED
+    amount_at_risk: float
     invoice_or_ref_id: str
-    amount: float
-    status: str = "OPEN"
     description: str
+    scenario_metadata: Dict[str, Any] = Field(default_factory=dict)
+    brief: Optional[Dict[str, Any]] = None
     citations: List[Dict[str, Any]] = Field(default_factory=list)
+    actions: List[Dict[str, Any]] = Field(default_factory=list)
+    approval_result: Optional[Dict[str, Any]] = None
+
+
+class TriggerCaseResponse(BaseModel):
+    case_id: str
+    status: str
+    message: str
+    case: DiscrepancyCase
+
+
+class CitationDetailResponse(BaseModel):
+    citation_key: str
+    case_id: str
+    source_table: str
+    row_id: str
+    target_row: Dict[str, Any]
+    context_rows: List[Dict[str, Any]]
+    live_ifsc: Optional[Dict[str, Any]] = None
+
+
+class ActionApprovalRequest(BaseModel):
+    notes: Optional[str] = "Approved by Finance Controller"
+    override_actions: Optional[List[Dict[str, Any]]] = None
+
+
+class ActionApprovalResponse(BaseModel):
+    case_id: str
+    status: str = "APPROVED"
+    idempotency_key: str
+    external_ref_id: str
+    routing_headers: Dict[str, Any]
+    vendor_notice_html: str
+    db_update_result: Dict[str, Any]
+    audit_trail_entry: Dict[str, Any]
+    executed_at: str
