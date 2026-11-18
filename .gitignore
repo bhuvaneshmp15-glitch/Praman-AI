@@ -54,3 +54,9 @@ pnpm-debug.log*
 .idea/
 .DS_Store
 Thumbs.db
+
+# Test & Playwright artifacts
+.pytest_cache/
+.playwright-mcp/
+scratch/
+*.log

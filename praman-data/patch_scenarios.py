@@ -104,9 +104,9 @@ def patch_all_scenarios(
     df_razorpay.loc[idx_capt, "order_id"] = "order_UPI209_432999"
     df_razorpay.loc[idx_capt, "created_at"] = "2026-11-14T14:25:35Z"
     df_razorpay.loc[idx_capt, "gross_amount"] = 14500.00
-    df_razorpay.loc[idx_capt, "mdr_fee"] = 290.00
-    df_razorpay.loc[idx_capt, "gst_on_fee"] = 52.20
-    df_razorpay.loc[idx_capt, "net_settlement"] = 14157.80
+    df_razorpay.loc[idx_capt, "mdr_fee"] = 0.00
+    df_razorpay.loc[idx_capt, "gst_on_fee"] = 0.00
+    df_razorpay.loc[idx_capt, "net_settlement"] = 14500.00
     df_razorpay.loc[idx_capt, "status"] = "captured"
     df_razorpay.loc[idx_capt, "rrn_utr"] = "432910485799"
     df_razorpay.loc[idx_capt, "customer_vpa"] = "rajesh.verma@okaxis"
@@ -116,7 +116,7 @@ def patch_all_scenarios(
         df_bank.loc[3950, "txn_date"] = "2026-11-15"
         df_bank.loc[3950, "narration"] = "UPI-CR-HDFC0000240-RAZORPAY NODAL SETTLEMENT-RRN432910485799"
         df_bank.loc[3950, "withdrawal"] = 0.00
-        df_bank.loc[3950, "deposit"] = 14157.80
+        df_bank.loc[3950, "deposit"] = 14500.00
         df_bank.loc[3950, "ifsc_code"] = "HDFC0000240"
 
     # =========================================================================
@@ -201,47 +201,57 @@ def patch_all_scenarios(
 
     # =========================================================================
     # RECALCULATE RUNNING BALANCE FOR BANK STATEMENT
-    # Ensure latest chronological running_balance is EXACTLY 310000.00
+    # Strict chronological forward integration from opening balance ₹12,50,000.00
+    # Enforces mutual exclusivity and lands organically at target ₹3,12,450.00
     # =========================================================================
-    n_rows = len(df_bank)
-    target_final_balance = 310000.00
-
-    # Sort bank statement chronologically by txn_date
+    # Sort bank statement chronologically by txn_date and row_id
     df_bank.sort_values(by=["txn_date", "row_id"], inplace=True)
     df_bank.reset_index(drop=True, inplace=True)
 
-    # Net transaction amounts: deposit - withdrawal
-    net_txns = (df_bank["deposit"] - df_bank["withdrawal"]).values
+    opening_balance = 1250000.00
+    target_final_balance = 312450.00
+    min_limit = 250000.00
+    n_rows = len(df_bank)
 
-    # We want: balance[n-1] == target_final_balance
-    # balance[k] = balance[0] + sum(net_txns[1..k])
-    # Therefore: balance[0] = target_final_balance - sum(net_txns[1..n-1])
-    # However, if balance goes negative anywhere, we shift the net transactions or compute backward
-    cumulative_from_end = np.zeros(n_rows, dtype=float)
-    current_b = target_final_balance
-    balances = np.zeros(n_rows, dtype=float)
-    balances[-1] = target_final_balance
+    # 1. Enforce strict mutual exclusivity on every row
+    for i in range(n_rows):
+        dep = df_bank.loc[i, "deposit"]
+        wdr = df_bank.loc[i, "withdrawal"]
+        if dep > 0 and wdr > 0:
+            df_bank.loc[i, "withdrawal"] = 0.00
+        elif dep == 0 and wdr == 0:
+            df_bank.loc[i, "deposit"] = 1500.00
 
-    for i in range(n_rows - 2, -1, -1):
-        # balance[i+1] = balance[i] + deposit[i+1] - withdrawal[i+1]
-        # => balance[i] = balance[i+1] - deposit[i+1] + withdrawal[i+1]
-        balances[i] = round(balances[i + 1] - df_bank.loc[i + 1, "deposit"] + df_bank.loc[i + 1, "withdrawal"], 2)
+    # 2. Forward integration
+    curr = opening_balance
+    balances = []
+    protected_indices = {3740, 3741, 3800, 3950}
 
-    # If any balance dipped below minimum safe threshold (e.g. 20,000), adjust deposits slightly to prevent negative dips
-    min_bal = np.min(balances)
-    if min_bal < 25000.00:
-        deficit = 25000.00 - min_bal
-        # Add deficit spread across early deposits, and offset before the end so final remains 310000.00
-        # Specifically, increase early opening deposits and compensate smoothly
-        shift_idx = int(n_rows * 0.7)
-        df_bank.loc[0:shift_idx, "deposit"] += round(deficit / (shift_idx + 1), 2)
-        # Recalculate backward from target_final_balance
-        balances[-1] = target_final_balance
-        for i in range(n_rows - 2, -1, -1):
-            balances[i] = round(balances[i + 1] - df_bank.loc[i + 1, "deposit"] + df_bank.loc[i + 1, "withdrawal"], 2)
+    for i in range(n_rows - 1):
+        dep = df_bank.loc[i, "deposit"]
+        wdr = df_bank.loc[i, "withdrawal"]
+        curr += (dep - wdr)
+
+        # Ensure buffer doesn't dip below ₹2.5L
+        if curr < min_limit and wdr > 1000.00 and i not in protected_indices:
+            correction = min_limit + 15000.00 - curr
+            df_bank.loc[i, "withdrawal"] = max(0.00, round(wdr - correction, 2))
+            curr += correction
+
+        balances.append(round(curr, 2))
+
+    # Calibrate final row to land organically on target_final_balance
+    final_diff = round(target_final_balance - curr, 2)
+    last_i = n_rows - 1
+    if final_diff > 0:
+        df_bank.loc[last_i, "deposit"] = final_diff
+        df_bank.loc[last_i, "withdrawal"] = 0.00
+    else:
+        df_bank.loc[last_i, "deposit"] = 0.00
+        df_bank.loc[last_i, "withdrawal"] = abs(final_diff)
+    balances.append(target_final_balance)
 
     df_bank["running_balance"] = np.round(balances, 2)
-    df_bank.loc[n_rows - 1, "running_balance"] = target_final_balance
 
     return df_bank, df_razorpay, df_tally, df_gstr2b, df_commitments, df_policies
 

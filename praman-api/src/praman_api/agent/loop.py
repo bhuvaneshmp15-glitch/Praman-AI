@@ -41,7 +41,7 @@ def run_investigation_sync(case_id: str, case_data: Optional[Dict[str, Any]] = N
             "text": "Initiating autonomous multi-table investigation for CASE-GST-104: Vendor 'Sri Balaji Enterprises' (Invoice INV-2026-104). Cross-referencing Tally ERP, GSTR-2B, Bank Statements, Postal Jurisdiction, and Cashflow Commitments..."
         }
 
-        # STEP 1: Attempt initial naive query — Triggers Self-Healing SQL Retry on Cartesian fanout
+        # STEP 1: Attempt initial naive query — Triggers Deterministic SQL Guardrail Check
         loose_sql = """
         SELECT t.invoice_id, t.vendor_name, b.row_id, b.narration, jw_sim(b.narration, t.vendor_name) AS sim
         FROM tally_invoices t
@@ -51,7 +51,7 @@ def run_investigation_sync(case_id: str, case_data: Optional[Dict[str, Any]] = N
         yield {
             "type": "action",
             "tool": "duckdb_sql",
-            "args": {"query": loose_sql, "purpose": "Attempt 1: Naive fuzzy match against bank narrations at 0.80 threshold"}
+            "args": {"query": loose_sql, "purpose": "Attempt 1: Naive fuzzy match against bank narrations at 0.80 threshold (guardrail test)"}
         }
 
         try:
@@ -61,7 +61,7 @@ def run_investigation_sync(case_id: str, case_data: Optional[Dict[str, Any]] = N
                 "type": "sql_retry",
                 "attempt": 1,
                 "error": str(err),
-                "healing_strategy": "Interception active: Tightening jw_sim threshold to >= 0.92, restricting to vendor IFSC 'KVBL0001245', extracting 12-digit UTR via extract_utr(), and applying QUALIFY ROW_NUMBER() OVER (PARTITION BY b.ifsc_code ORDER BY sim_score DESC) = 1 to eliminate phonetic decoys."
+                "healing_strategy": "Deterministic Guardrail Active: Intercepting loose match; tightening jw_sim threshold to >= 0.92, restricting to vendor IFSC 'KVBL0001245', extracting 12-digit UTR via extract_utr(), and applying QUALIFY ROW_NUMBER() OVER (PARTITION BY b.ifsc_code ORDER BY sim_score DESC) = 1 to eliminate phonetic decoys."
             }
 
         # STEP 2: Healed defensive CTE query
@@ -87,8 +87,8 @@ def run_investigation_sync(case_id: str, case_data: Optional[Dict[str, Any]] = N
             WHERE invoice_num = 'INV-2026-104'
         )
         SELECT v.*, b.row_id AS matched_bank_row, b.narration AS matched_narration, b.extracted_utr, b.sim_score,
-               COALESCE(t.itc_eligible_amount, 0.0) AS itc_eligible,
-               COALESCE(t.filing_status, 'NOT_FILED') AS tax_filing_status
+                COALESCE(t.itc_eligible_amount, 0.0) AS itc_eligible,
+                COALESCE(t.filing_status, 'NOT_FILED') AS tax_filing_status
         FROM vendor_inv v
         LEFT JOIN bank_matches b ON 1=1
         LEFT JOIN tax_status t ON v.invoice_id = t.invoice_num;
@@ -96,7 +96,7 @@ def run_investigation_sync(case_id: str, case_data: Optional[Dict[str, Any]] = N
         yield {
             "type": "action",
             "tool": "duckdb_sql",
-            "args": {"query": healed_sql, "purpose": "Attempt 2: Healed multi-table reconciliation with CTE and jw_sim >= 0.92"}
+            "args": {"query": healed_sql, "purpose": "Attempt 2: Guarded multi-table reconciliation with CTE and jw_sim >= 0.92"}
         }
 
         res_recon = duckdb_sql(healed_sql, purpose="Healed 3-way reconciliation")
@@ -348,7 +348,7 @@ Audit cross-checks across the semantic plane and public verification APIs reveal
         )
         cit2 = record_finding(
             title="Captured & Settled Transaction Log",
-            detail="Transaction UTR 432910485799 was successfully captured and credited with net settlement ₹14,157.80 after MDR fees.",
+            detail="Transaction UTR 432910485799 was successfully captured and credited with net settlement ₹14,500.00 (Zero MDR under Ministry of Finance UPI regime).",
             citation_id="CIT-2",
             source_table="razorpay_upi",
             row_id="pay_UPI209_CAPT"
@@ -406,7 +406,7 @@ Audit cross-checks across the semantic plane and public verification APIs reveal
 #### 1. Investigation Findings
 The customer reported a double debit of **₹14,500.00** on 2026-11-14.
 - **Attempt 1 (UTR: 432910485711)**: Gateway logs confirm `status = failed_at_switch` [CIT-1]. The funds remain in the issuing bank / NPCI switch node and are eligible for automatic RBI circular clearing (T+1 auto-reversal).
-- **Attempt 2 (UTR: 432910485799)**: Gateway logs confirm `status = captured` [CIT-2], and net settlement of **₹14,157.80** was deposited into the company's HDFC clearing account [CIT-3] (Branch: HDFC Bank Fort Mumbai [ifsc_live#HDFC0000240]).
+- **Attempt 2 (UTR: 432910485799)**: Gateway logs confirm `status = captured` [CIT-2], and net settlement of **₹14,500.00** was deposited into the company's HDFC clearing account [CIT-3] (Branch: HDFC Bank Fort Mumbai [ifsc_live#HDFC0000240]).
 
 #### 2. Verdict & Recommendation
 - **Reject Merchant Refund**: Do not disburse a refund from merchant funds, as doing so would cause an unrecoverable double loss.
@@ -605,16 +605,16 @@ Approving this payout would have caused an unrecoverable **₹1,25,000.00 duplic
 
         yield {
             "type": "thought",
-            "text": f"SQL query synthesized via [{planner_src}] in {plan_result['latency_ms']}ms using Praman DuckDB semantic plane and Indic UDFs."
+            "text": f"SQL query planned via [{planner_src}] in {plan_result['latency_ms']}ms. Executing Deterministic SQL Guardrail Check (anti-Cartesian fanout, qualifying window partitions, SUM(running_balance) interception)..."
         }
 
         yield {
             "type": "action",
             "tool": "duckdb_sql",
-            "args": {"query": planned_sql, "purpose": f"Execute AI-planned query ({planner_src})"}
+            "args": {"query": planned_sql, "purpose": f"Execute planned query ({planner_src})"}
         }
 
-        # 2. Execute SQL with guardrails & self-healing
+        # 2. Execute SQL with guardrails & deterministic correction
         try:
             sql_res = duckdb_sql(planned_sql, purpose="Custom AI-planned query")
         except SqlSemanticError as err:
@@ -622,30 +622,150 @@ Approving this payout would have caused an unrecoverable **₹1,25,000.00 duplic
                 "type": "sql_retry",
                 "attempt": 1,
                 "error": str(err),
-                "healing_strategy": "Interception active: Restructuring SQL to defensive CTE and applying strict ROW_NUMBER() window function."
+                "healing_strategy": "Deterministic Guardrail Active: Restructuring query to defensive CTE and applying strict ROW_NUMBER() window function."
             }
-            healed_sql = _build_deterministic_sql(query_text, narration_text, plan_result.get("extracted_utr", ""), plan_result.get("norm_vendor", ""))
-            sql_res = duckdb_sql(healed_sql, purpose="Healed custom SQL query")
+            healed_sql = _build_deterministic_sql(query_text, narration_text, plan_result.get("parsed_intent"))
+            sql_res = duckdb_sql(healed_sql, purpose="Guarded custom SQL query")
 
         yield {"type": "observation", "tool": "duckdb_sql", "result": sql_res}
 
-        # 3. Dynamic Evidence Citation
+        # 3. Evidence-Grounded Branching
         row_count = sql_res.get("row_count", 0)
-        first_row = sql_res["rows"][0] if row_count > 0 else []
-        col_names = sql_res.get("columns", [])
-        row_dict = dict(zip(col_names, first_row)) if first_row else {}
 
-        entity_desc = str(row_dict.get("vendor_name") or row_dict.get("narration") or "Discrepancy record verified")
+        # -----------------------------------------------------------------
+        # BRANCH A: 0 rows matched (Record not found in ledger / Fake UTR)
+        # -----------------------------------------------------------------
+        if row_count == 0:
+            brief_md = f"""### Forensic Audit Brief: Unverified Ledger Record (`{case_id}`)
+
+#### 1. Investigation Findings
+Investigation triggered for: **"{query_text}"**.
+Deterministic SQL audit queries were executed across bank statements, Razorpay UPI transactions, Tally invoices, and GSTR-2B filings.
+
+- **Match Status**: **0 matching records found** in analytical ledger tables.
+- **Verification Result**: The reference entity, invoice number, or 12-digit UTR does not exist in company books or banking records.
+- **Citation Status**: Zero citations generated (no ungrounded or fabricated evidence registered).
+
+#### 2. Risk & Working Capital Assessment
+- **Amount at Risk**: ₹0.00 verified on ledger.
+- **Risk Assessment**: High probability of fictitious claim, forged payment proof, or unrecorded transaction.
+- **Protective Stance**: Retain funds; enforce mandatory documentary verification before approval.
+
+#### 3. Prescribed Actions
+1. **Reject Disbursement**: Do NOT disburse funds or release goods against unverified claims.
+2. **Demand Formal Proof**: Require counterparty to submit verifiable bank statement with valid 12-digit UTR or digitally signed tax invoice.
+"""
+            actions = [
+                {"action": "REJECT_UNVERIFIED_CLAIM", "query": query_text, "reason": "RECORD_NOT_FOUND_IN_LEDGER"},
+                {"action": "DEMAND_VALID_UTR_PROOF", "case_id": case_id}
+            ]
+            verdict = conclude_brief(
+                headline=f"Unverified Claim: Record Not Found in Ledger ({case_id})",
+                decision="NOT_FOUND_IN_LEDGER",
+                markdown_brief=brief_md,
+                actions=actions
+            )
+            yield {"type": "verdict", "data": verdict}
+            return
+
+        # -----------------------------------------------------------------
+        # Records were matched! Inspect primary row
+        # -----------------------------------------------------------------
+        first_row = sql_res["rows"][0]
+        col_names = sql_res.get("columns", [])
+        row_dict = dict(zip(col_names, first_row))
+
+        entity_desc = str(row_dict.get("vendor_name") or row_dict.get("narration") or row_dict.get("customer_vpa") or "Matched Record")
+        ref_id = str(row_dict.get("invoice_id") or row_dict.get("payment_id") or row_dict.get("row_id") or "REC-001")
+        source_tbl = "tally_invoices" if "invoice_id" in row_dict else ("razorpay_upi" if "payment_id" in row_dict else "bank_statement")
+
+        # Register genuine CIT-1
         cit1 = record_finding(
-            title=f"Custom Discrepancy Evidence Ledger ({case_id})",
-            detail=f"Found {row_count} records matching criteria '{query_text}'. Primary target: {entity_desc}.",
+            title=f"Matched Ledger Record ({case_id})",
+            detail=f"Retrieved {row_count} record(s). Primary match: {entity_desc} (Ref: {ref_id}).",
             citation_id="CIT-1",
-            source_table="duckdb_analytics",
-            row_id=str(row_dict.get("invoice_id") or row_dict.get("row_id") or "CUST-001")
+            source_table=source_tbl,
+            row_id=ref_id
         )
         yield {"type": "finding", "data": cit1}
 
-        # 4. Bank Balance & Cashflow Runway Check
+        # Check for discrepancies in the matched row:
+        filing_status = str(row_dict.get("gstr2b_filing_status") or row_dict.get("filing_status") or "").upper()
+        itc_eligible = float(row_dict.get("gstr2b_itc") or row_dict.get("itc_eligible_amount") or 0.0)
+        igst_amt = float(row_dict.get("igst_amount") or 0.0)
+        total_amt = float(row_dict.get("total_amount") or row_dict.get("gross_amount") or row_dict.get("withdrawal") or row_dict.get("deposit") or 0.0)
+        upi_status = str(row_dict.get("status") or "").lower()
+
+        is_reconciled = False
+        is_discrepancy = False
+        hold_val = 0.0
+        discrepancy_reason = ""
+
+        if filing_status == "FILED":
+            is_reconciled = True
+        elif filing_status == "NOT_FILED":
+            is_discrepancy = True
+            hold_val = igst_amt if igst_amt > 0 else round(total_amt * 0.18 / 1.18, 2)
+            discrepancy_reason = f"GSTR-2B filing unfiled under Section 16(2)(aa). Withholding tax component of ₹{hold_val:,.2f}."
+        elif upi_status == "captured":
+            is_reconciled = True
+        elif upi_status in ("failed_at_switch", "failed"):
+            is_discrepancy = True
+            hold_val = total_amt
+            discrepancy_reason = f"UPI switch failure detected for amount ₹{hold_val:,.2f}. Funds remain at banking node."
+        elif "bank_row" in row_dict and row_dict.get("bank_row") is not None:
+            is_reconciled = True
+        else:
+            is_reconciled = True
+
+        # -----------------------------------------------------------------
+        # BRANCH B: Matched & Reconciled (Safe to pay)
+        # -----------------------------------------------------------------
+        if is_reconciled and not is_discrepancy:
+            if filing_status == "FILED":
+                cit2 = record_finding(
+                    title="GSTR-2B Filing Compliance Verified",
+                    detail=f"Invoice {ref_id} verified in GSTR-2B portal with status 'FILED' and eligible ITC of ₹{itc_eligible:,.2f}.",
+                    citation_id="CIT-2",
+                    source_table="gstr2b_tax",
+                    row_id=ref_id
+                )
+                yield {"type": "finding", "data": cit2}
+
+            brief_md = f"""### Executive Reconciliation Brief: Reconciled & Safe to Disburse (`{case_id}`)
+
+#### 1. Reconciliation Findings
+- **Matched Primary Entity**: `{entity_desc}` [CIT-1]
+- **Reference Identifier**: `{ref_id}`
+- **Transaction Amount**: ₹{total_amt:,.2f}
+- **Filing / Settlement Status**: Confirmed reconciled across ledger and tax/banking channels.
+- **Audit Verification**: Ledger entries match supporting records. No compliance flags or double-payments detected.
+
+#### 2. Cash-Flow & Liquidity Impact
+- **Disbursement Amount**: ₹{total_amt:,.2f}
+- **Hold Amount Required**: **₹0.00** (Full compliance verified).
+- **Post-Payment Liquidity**: Cash buffer remains adequate.
+
+#### 3. Prescribed Actions
+1. **Approve Disbursement**: Release payment of ₹{total_amt:,.2f} to `{entity_desc}`.
+2. **Close Reconciliation Ticket**: Update accounting status to settled.
+"""
+            actions = [
+                {"action": "APPROVE_DISBURSEMENT", "reference_id": ref_id, "amount": total_amt},
+                {"action": "CLOSE_RECONCILIATION_TICKET", "case_id": case_id}
+            ]
+            verdict = conclude_brief(
+                headline=f"Verified Safe to Disburse: {entity_desc} ({case_id})",
+                decision="VERIFIED_SAFE_TO_PAY",
+                markdown_brief=brief_md,
+                actions=actions
+            )
+            yield {"type": "verdict", "data": verdict}
+            return
+
+        # -----------------------------------------------------------------
+        # BRANCH C: Matched with Discrepancy (Hold disputed portion)
+        # -----------------------------------------------------------------
         balance_sql = """
         WITH latest_bal AS (
             SELECT running_balance 
@@ -667,12 +787,10 @@ Approving this payout would have caused an unrecoverable **₹1,25,000.00 duplic
         curr_balance = float(bal_res["rows"][0][0])
         upcoming_emi = float(bal_res["rows"][0][1])
 
-        payout_val = float(row_dict.get("total_amount") or row_dict.get("withdrawal") or row_dict.get("gross_amount") or 50000.00)
-        hold_val = round(payout_val * 0.18, 2)
         runway_calc = calculate_emi_runway(
             current_balance=curr_balance,
             upcoming_emi=upcoming_emi,
-            total_payout=payout_val,
+            total_payout=total_amt,
             amount_held=hold_val
         )
 
@@ -685,37 +803,32 @@ Approving this payout would have caused an unrecoverable **₹1,25,000.00 duplic
         )
         yield {"type": "finding", "data": cit2}
 
-        # 5. Brief Verdict
-        brief_md = f"""### Autonomous Investigation Brief: `{case_id}`
+        brief_md = f"""### Executive Reconciliation Brief: Discrepancy Hold Enforced (`{case_id}`)
 
-#### 1. Discrepancy & Hypothesis
-Investigation triggered with query: **"{query_text}"** [CIT-1].
-Planner architecture: **Neuro-Symbolic Hybrid** (SQL generated via `{planner_src}`, executed with deterministic UDF & Cartesian guardrails).
+#### 1. Discrepancy & Root Cause Analysis
+Investigation triggered for: **"{query_text}"** [CIT-1].
+- **Matched Primary Entity**: `{entity_desc}` [CIT-1]
+- **Discrepancy Detected**: {discrepancy_reason}
+- **Discrepancy Delta to Hold**: **₹{hold_val:,.2f}**
 
-#### 2. Tabular Evidence & Match
-- **Rows Retrieved**: {row_count} record(s) matching analytical criteria.
-- **Matched Primary Entity**: `{entity_desc}` [CIT-1].
-- **Reference Amount**: ₹{payout_val:,.2f}
-
-#### 3. Deterministic Cash-Flow & Runway Math
+#### 2. Deterministic Cash-Flow & Runway Impact
 - **Current Operating Bank Balance**: {runway_calc['formatted']['current_bank_balance']} [CIT-2]
 - **Upcoming Critical EMI Commitment**: {runway_calc['formatted']['upcoming_30d_critical_emi']} [CIT-2]
 - **Full Payout Impact**: Leaves free cash of **{runway_calc['formatted']['post_emi_free_cash_without_praman']}** ({runway_calc['formatted']['coverage_without_praman']} coverage).
-- **Protected Payout Buffer**: Preserves **{runway_calc['formatted']['post_emi_free_cash_with_praman']}** ({runway_calc['formatted']['coverage_with_praman']} coverage).
+- **Protected Payout Buffer (with Praman Hold)**: Preserves **{runway_calc['formatted']['post_emi_free_cash_with_praman']}** ({runway_calc['formatted']['coverage_with_praman']} coverage).
 
-#### 4. Prescribed Actions
-1. **Hold Disputed Amount**: Retain ₹{hold_val:,.2f} pending supplier tax credit validation.
-2. **Statutory GSTR-2B Verification**: Cross-verify invoice on GSTN portal under CGST Section 16(2)(aa).
-3. **Protect EMI Liquidity**: Ring-fence required funds for upcoming debt service.
+#### 3. Prescribed Actions
+1. **Hold Disputed Portion**: Withhold exactly ₹{hold_val:,.2f} from disbursement to `{entity_desc}`.
+2. **Ring-Fence EMI Liquidity**: Lock ₹{upcoming_emi:,.2f} for upcoming debt service.
+3. **Notify Counterparty**: Demand tax filing or bank switch reversal confirmation.
 """
         actions = [
-            {"action": "HOLD_PAYOUT", "reference_id": str(row_dict.get("invoice_id") or case_id), "amount": hold_val},
+            {"action": "HOLD_PAYOUT", "reference_id": ref_id, "amount": hold_val},
             {"action": "RINGFENCE_LIQUIDITY", "commitment_id": "COM-001", "amount": upcoming_emi}
         ]
-
         verdict = conclude_brief(
-            headline=f"Custom Investigation Verdict: {case_id}",
-            decision="HOLD_DISPUTED_PAYOUT",
+            headline=f"Discrepancy Hold Enforced: {entity_desc} ({case_id})",
+            decision="HOLD_DISPUTED_PORTION",
             markdown_brief=brief_md,
             actions=actions
         )

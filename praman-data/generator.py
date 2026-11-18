@@ -182,9 +182,9 @@ def generate_datasets(output_dir: Path):
         )[0]
 
         if status == "captured":
-            mdr_fee = round(gross_amt * 0.02, 2)  # 2.0% standard PG MDR
-            gst_on_fee = round(mdr_fee * 0.18, 2) # 18% GST on MDR
-            net_settlement = round(gross_amt - mdr_fee - gst_on_fee, 2)
+            mdr_fee = 0.00       # Zero-MDR on UPI under Jan 2020 Ministry of Finance mandate
+            gst_on_fee = 0.00    # Zero GST on fee
+            net_settlement = gross_amt
         else:
             mdr_fee = 0.00
             gst_on_fee = 0.00
@@ -221,36 +221,82 @@ def generate_datasets(output_dir: Path):
     # Ensure final timestamp is Nov 18, 2026
     timestamps[-1] = datetime(2026, 11, 18, 17, 30, 0)
 
+    # Reconcile 90% (>85%) of captured UPI transactions into bank statement deposits
+    captured_upi = [u for u in razorpay_rows if u["status"] == "captured"]
+    n_reconciled = int(len(captured_upi) * 0.90)
+    reconciled_upi = captured_upi[:n_reconciled]
+    random.shuffle(reconciled_upi)
+
+    # Total deposits count across 4000 rows
+    total_deposits_count = len(reconciled_upi) + 120
+    deposit_indices = set(random.sample(range(3990), total_deposits_count))
+
+    upi_cursor = 0
+    opening_bal = 1250000.00
+    target_final = 312450.00
+    min_limit = 250000.00
+
+    # Smooth target baseline curve from 12.5L to 3,12,450.00
+    t_steps = np.linspace(0, 1, 4000)
+    baseline_curve = 1250000.00 * (1 - t_steps) + target_final * t_steps + 350000.00 * np.sin(2 * np.pi * t_steps * 3.5)
+
+    curr_bal = opening_bal
+
     for i in range(4000):
         row_id = f"BNK-{i+1:04d}"
         txn_dt = timestamps[i].strftime("%Y-%m-%d")
         ifsc = random.choice(REAL_IFSC_CODES)
 
-        is_deposit = random.random() < 0.48
-        if is_deposit:
-            # Razorpay settlement, customer NEFT credit, POS swipe, investor advance
-            deposit = round(float(random.choice([
-                random.uniform(5000, 35000),
-                random.uniform(35000, 120000),
-                random.uniform(120000, 450000)
-            ])), 2)
+        is_deposit = i in deposit_indices or (i == 3999 and target_final > curr_bal)
+
+        if i == 3999:
+            # Final row calibration to land organically on target_final
+            diff = round(target_final - curr_bal, 2)
+            if diff > 0:
+                deposit = diff
+                withdrawal = 0.00
+                narration = f"UPI-CR-{ifsc}-RAZORPAY NODAL SETTLEMENT-RRN/{random.randint(100000000000, 999999999999)}"
+            else:
+                deposit = 0.00
+                withdrawal = abs(diff)
+                narration = f"NEFT-DR-{ifsc}-WORKING CAPITAL DEBIT/FINAL-{random.randint(1000, 9999)}"
+            curr_bal = target_final
+        elif is_deposit:
             withdrawal = 0.00
-            utr_sample = random.randint(100000000000, 999999999999)
-            patterns = [
-                f"UPI-CR-{ifsc}-RAZORPAY NODAL SETTLEMENT-RRN/{utr_sample}",
-                f"NEFT-CR-{ifsc}-{generate_company_name()[:15].upper()}-SETTLEMENT/{utr_sample}",
-                f"RTGS-CR-{ifsc}-CLIENT INVOICE RECEIPT-UTR/{utr_sample}",
-                f"POS-CR-{ifsc}-PAYTM SWIPE MERCHANT CR/{utr_sample}"
-            ]
-            narration = random.choice(patterns)
+            if upi_cursor < len(reconciled_upi):
+                u = reconciled_upi[upi_cursor]
+                upi_cursor += 1
+                deposit = u["net_settlement"]
+                narration = f"UPI-CR-{ifsc}-RAZORPAY NODAL SETTLEMENT-RRN/{u['rrn_utr']}"
+            else:
+                deposit = round(float(random.choice([
+                    random.uniform(15000, 45000),
+                    random.uniform(45000, 120000),
+                    random.uniform(120000, 250000)
+                ])), 2)
+                utr_sample = random.randint(100000000000, 999999999999)
+                patterns = [
+                    f"NEFT-CR-{ifsc}-{generate_company_name()[:15].upper()}-SETTLEMENT/{utr_sample}",
+                    f"RTGS-CR-{ifsc}-CLIENT INVOICE RECEIPT-UTR/{utr_sample}",
+                    f"POS-CR-{ifsc}-PAYTM SWIPE MERCHANT CR/{utr_sample}"
+                ]
+                narration = random.choice(patterns)
+            curr_bal += deposit
         else:
-            # Supplier payout, payroll, loan EMI, GST challan, rent
-            withdrawal = round(float(random.choice([
-                random.uniform(4000, 30000),
-                random.uniform(30000, 115000),
-                random.uniform(115000, 400000)
-            ])), 2)
             deposit = 0.00
+            desired_wdr = curr_bal - baseline_curve[min(i + 1, 3999)]
+            if desired_wdr < 500:
+                desired_wdr = random.uniform(500, 8000)
+            elif desired_wdr > 150000:
+                desired_wdr = random.uniform(80000, 150000)
+            else:
+                desired_wdr = desired_wdr * random.uniform(0.7, 1.3)
+
+            max_safe = max(0.0, curr_bal - min_limit - 1000.0)
+            withdrawal = min(round(desired_wdr, 2), round(max_safe, 2))
+            if withdrawal < 100.0:
+                withdrawal = 100.0
+
             utr_sample = random.randint(100000000000, 999999999999)
             patterns = [
                 f"NEFT-DR-{ifsc}-{generate_company_name()[:15].upper()}-PAYMENT/{utr_sample}",
@@ -260,6 +306,7 @@ def generate_datasets(output_dir: Path):
                 f"GST-DR-{ifsc}-CBIC GST PMT06 CHALLAN DEBIT/{utr_sample}"
             ]
             narration = random.choice(patterns)
+            curr_bal -= withdrawal
 
         bank_rows.append({
             "row_id": row_id,
@@ -267,7 +314,7 @@ def generate_datasets(output_dir: Path):
             "narration": narration,
             "withdrawal": withdrawal,
             "deposit": deposit,
-            "running_balance": 0.00,  # Will be calculated backwards precisely in patch_scenarios
+            "running_balance": round(curr_bal, 2),
             "ifsc_code": ifsc
         })
 
@@ -324,8 +371,8 @@ def generate_datasets(output_dir: Path):
             "SEC-1.1"
         ),
         (
-            "POL-003", "GST_RECONCILIATION", "CGST Section 16(2)(aa) & Rule 36(4) Mandatory ITC Verification",
-            "Vendor invoices lacking matching entries in GSTR-2B or possessing zero eligible ITC must be placed on immediate payment hold to avoid cash outflow on non-creditable input taxes.",
+            "POL-003", "GST_RECONCILIATION", "CGST Section 16(2)(aa) & Section 16(4) Mandatory ITC Matching Policy",
+            "Under Section 16(2)(aa) of the CGST Act 2017, Input Tax Credit cannot be availed in GSTR-3B unless reflected in GSTR-2B. Vendor invoices lacking matching entries in GSTR-2B must have their GST portion placed on statutory payment hold (blocked working-capital risk) until the supplier furnishes GSTR-1. Credit remains recoverable under Section 16(4) if claimed on or before 30th November following the end of the financial year.",
             "SEC-2.3"
         ),
         (

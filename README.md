@@ -6,7 +6,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![DuckDB](https://img.shields.io/badge/DuckDB-1.1.0-FFF000.svg?style=flat&logo=duckdb&logoColor=black)](https://duckdb.org)
 [![Vite + React](https://img.shields.io/badge/Frontend-React_18_+_Vite-61DAFB.svg?style=flat&logo=react&logoColor=black)](https://vitejs.dev)
-[![Tests](https://img.shields.io/badge/Tests-29%20Passed%20(100%25)-success.svg)](https://pytest.org)
+[![Tests](https://img.shields.io/badge/Tests-35%20Passed%20(100%25)-success.svg)](https://pytest.org)
 [![Zero API Keys](https://img.shields.io/badge/Keys_Required-ZERO_(Keyless_APIs)-brightgreen.svg)](#-live-keyless-public-apis)
 
 ---
@@ -17,10 +17,11 @@ Indian Small and Medium Enterprises (SMEs) face a recurring structural liquidity
 
 Standard enterprise solutions fail Indian finance teams because:
 1. **Bank statement narrations are deeply corrupted:** Primary keys (12-digit UTRs/RRNs) are buried within unstructured text (`UPI/432910485711/CR/BALAJI/HDFC...`), while vendor names are corrupted by honorifics and abbreviations (`M/s Sri Balaji Ent Pvt Ltd` vs. `Balaji Traders`).
-2. **Naive LLMs hallucinatory SQL:** Generic LLMs naively execute `SUM(running_balance)` across bank statements (an arithmetic financial catastrophe) or perform loose string joins (`LIKE '%Balaji%'`) that generate Cartesian explosions across decoy transactions.
+2. **Naive LLMs generate hazardous SQL:** Generic LLMs naively execute `SUM(running_balance)` across bank statements (an arithmetic financial catastrophe) or perform loose string joins (`LIKE '%Balaji%'`) that generate Cartesian explosions across phonetic decoys.
 3. **LLMs cannot do mental arithmetic:** Asking an LLM to compute post-disbursement EMI coverage ratios results in contradictory numbers and fabricated safety claims.
+4. **Data Privacy & PII Exposure:** Sending raw bank narrations, customer VPAs, and bank account numbers to unauthenticated external endpoints violates basic privacy norms.
 
-**Praman** solves this by pairing an **in-memory DuckDB Semantic Data Plane (10,040 rows across 6 tables)** with **4 pure Indic/Financial Python UDFs**, an **autonomous Self-Healing SQL Loop**, **deterministic Cash-Flow Runway Math**, and **4 live, keyless public APIs**. It produces an **Editorial Financial Dossier** with verifiable row-level citations and 1-click human execution.
+**Praman** solves this by pairing an **in-memory DuckDB Semantic Data Plane (10,040 rows across 6 tables)** with **4 pure Indic/Financial Python UDFs**, a **Deterministic SQL Guardrail Engine**, **Local PII Redaction**, **deterministic Cash-Flow Runway Math**, and **4 live, keyless public APIs**. It produces an **Editorial Financial Dossier** with verifiable row-level citations and 1-click human execution.
 
 ---
 
@@ -34,7 +35,7 @@ Standard enterprise solutions fail Indian finance teams because:
  │  ┌────────────────────────────────────────┐  ┌──────────────────────────────────────┐  │
  │  │      Live DuckDB SQL & UDF Feed        │  │     Cited Executive Decision Brief   │  │
  │  │  • Real-time SSE Agent Reasoning Trace │  │  • Clickable Audit Citation Chips    │  │
- │  │  • Self-Healing SQL Retry Diagnostics  │  │  • 30-Day Loan EMI Runway Widget     │  │
+ │  │  • Deterministic SQL Guardrail Checks  │  │  • 30-Day Loan EMI Runway Widget     │  │
  │  │  • Live Bank Routing / IFSC Headers    │  │  • 1-Click Human Approval Cinematic  │  │
  │  └───────────────────▲────────────────────┘  └──────────────────▲───────────────────┘  │
  └──────────────────────┼──────────────────────────────────────────┼──────────────────────┘
@@ -44,8 +45,9 @@ Standard enterprise solutions fail Indian finance teams because:
  │                                                                                        │
  │   ┌────────────────────────────────────────────────────────────────────────────────┐   │
  │   │                   Autonomous Neuro-Symbolic Agent Loop                         │   │
- │   │  • Deterministic Planner (Runs with ZERO API keys in .env · No 429 Rate Limits)│   │
- │   │  • Self-Healing SQL: Catches Cartesian Fanouts & Retries with Defensive CTEs   │   │
+ │   │  • Local Intent & PII Parser (Zero external leaks · Redacts UTRs, VPAs, Accs)  │   │
+ │   │  • Deterministic SQL Guardrail Check: Catches Cartesian Fanouts & Enforces CTEs │   │
+ │   │  • Optional Keyed LLM (OpenAI / Gemini) with automatic PII tokenization        │   │
  │   └───────────────────▲─────────────────────────────────────────▲──────────────────┘   │
  │                       │                                         │                      │
  │   ┌───────────────────┴───────────────────────┐ ┌───────────────┴──────────────────┐   │
@@ -59,7 +61,7 @@ Standard enterprise solutions fail Indian finance teams because:
  │   │                     DuckDB Semantic Data Plane (praman.duckdb)                  │   │
  │   │  • 10,040 Indexed Rows across 6 Relational SME Financial Tables                 │   │
  │   │  • Anti-Bug Guardrail 1: Blocks SUM(running_balance) on Bank Statements         │   │
- │   │  • Anti-Bug Guardrail 2: Blocks Unranked Cartesian Fuzzy Matches (sim < 0.92)   │   │
+ │   │  • Anti-Bug Guardrail 2: Blocks Unranked Cartesian Fuzzy Matches (sim < 0.90)   │   │
  │   │                                                                                 │   │
  │   │  4 Indic / Financial Pure Python UDFs:                                          │   │
  │   │  1. extract_utr()             2. norm_indic_vendor()                            │   │
@@ -75,42 +77,15 @@ Standard enterprise solutions fail Indian finance teams because:
 | Financial Problem | Naive RAG / Generic Text-to-SQL | Praman Autonomous Engine |
 | :--- | :--- | :--- |
 | **Bank Narrations** | Fails to match `UPI/432910485711/CR/BALAJI/HDFC` with invoice ID `INV-2026-104`. | `extract_utr()` extracts exact 12-digit RRN via regex; `norm_indic_vendor()` normalizes Indian SME suffixes. |
-| **Phonetic Decoys** | Matches 8 decoy companies (`Balaji Traders`, `Sri Balaji Packaging`), causing Cartesian explosion. | Guardrail blocks loose matches; Self-Healing Loop raises threshold to `jw_sim >= 0.92` with `QUALIFY ROW_NUMBER() = 1`. |
+| **Phonetic Decoys** | Matches 8 decoy companies (`Balaji Traders`, `Sri Balaji Packaging`), causing Cartesian explosion. | Guardrail blocks loose matches; Guardrail Loop raises threshold to `jw_sim >= 0.92` with `QUALIFY ROW_NUMBER() = 1`. |
 | **Bank Balance Math** | Attempts `SUM(running_balance)`, resulting in astronomical false cash figures. | DuckDB plane raises `SqlSemanticError`; forces query into window CTE `ORDER BY txn_date DESC, row_id DESC LIMIT 1`. |
-| **Cashflow Protection** | Hallucinates post-payout runway math; claims ₹16,000 cash buffer is "safe". | Deterministic Python calculator enforces liquidity thresholds, proving debt service ratio drops from 2.82x to 1.15x. |
-| **API Costs & Rate Limits** | Requires expensive LLM tokens; frequently crashes with `429 Too Many Requests`. | **ZERO API keys required** in `.env`. Operates with keyless public APIs and deterministic symbolic planning. |
+| **Cashflow Protection** | Hallucinates post-payout runway math; claims ₹18,450 cash buffer is "safe". | Deterministic Python calculator enforces liquidity thresholds, proving debt service ratio drops from 2.84x to 1.17x. |
+| **PII & Privacy** | Sends raw vendor names, VPAs, and UTRs to public endpoints. | **Local regex PII redaction** tokenizes UTRs, VPAs, and bank accounts before any external dispatch. |
+| **API Costs & Rate Limits** | Requires expensive LLM tokens; frequently crashes with `429 Too Many Requests`. | **ZERO API keys required** in `.env`. Operates with keyless public APIs and local deterministic symbolic planning. |
 
 ---
 
-## 🛠️ The 4 Indic & Financial DuckDB UDFs
-
-Registered directly into DuckDB session via `conn.create_function(...)`:
-
-### 1. `extract_utr(text: str) -> str`
-Extracts the exact 12-digit RBI Unique Transaction Reference / RRN from noisy unstructured Indian bank narrations.
-```python
-# Handles UPI, IMPS, RTGS, NEFT, and RRN variations:
-r'(?:UPI/|UTR[-/:]?|IMPS[-/:]?|RRN[-/:]?)([0-9]{12})'
-```
-
-### 2. `norm_indic_vendor(name: str) -> str`
-Standardizes Indian SME corporate nomenclature:
-- Strips honorifics: `M/S`, `SHRI`, `SRI`, `SHREE`.
-- Expands Indian legal abbreviations: `ENT` $\rightarrow$ `ENTERPRISES`, `PVT LTD` $\rightarrow$ `PRIVATE LIMITED`, `TRD` $\rightarrow$ `TRADERS`, `IND` $\rightarrow$ `INDUSTRIES`.
-- Cleans punctuation and whitespace.
-
-### 3. `jw_sim(s1: str, s2: str) -> float`
-Enhanced Jaro-Winkler similarity calculator with token sliding-window matching. Evaluates normalized vendor names against narration fragments, achieving **0.987** on genuine matches while rejecting phonetic decoys at **< 0.89**.
-
-### 4. `validate_gstin_checksum(gstin: str) -> bool`
-Validates 15-character Indian Goods and Services Tax Identification Numbers:
-```
-^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$
-```
-
----
-
-## 🛡️ Anti-Bug Semantic Guardrails & Self-Healing SQL
+## 🛡️ Anti-Bug Semantic Guardrails & Defensive Execution
 
 The DuckDB plane (`DuckDBPlane.execute_query`) intercepts hazardous SQL before database evaluation:
 
@@ -122,7 +97,7 @@ The DuckDB plane (`DuckDBPlane.execute_query`) intercepts hazardous SQL before d
 2. **Anti-Bug Guardrail 2 (Cartesian Fanout Prevention):**
    Detects naive fuzzy joins with thresholds $< 0.90$ lacking window ranking functions.
 
-### Self-Healing SQL Loop in Action:
+### Deterministic SQL Guardrail Check in Action:
 ```sql
 -- Attempt 1 (Naive query generated by agent - INTERCEPTED by Guardrail 2):
 SELECT t.invoice_id, t.vendor_name, b.row_id, b.narration, jw_sim(b.narration, t.vendor_name) AS sim
@@ -163,6 +138,17 @@ LEFT JOIN tax_status t ON v.invoice_id = t.invoice_num;
 
 ---
 
+## 🛠️ The 4 Indic & Financial DuckDB UDFs
+
+Registered directly into DuckDB session via `conn.create_function(...)`:
+
+1. **`extract_utr(text: str) -> str`**: Extracts exact 12-digit RBI UTR/RRN from noisy unstructured Indian bank narrations.
+2. **`norm_indic_vendor(name: str) -> str`**: Strips honorifics (`M/S`, `SHRI`, `SRI`), expands abbreviations (`ENT` $\rightarrow$ `ENTERPRISES`, `PVT LTD` $\rightarrow$ `PRIVATE LIMITED`), and cleans punctuation.
+3. **`jw_sim(s1: str, s2: str) -> float`**: Enhanced Jaro-Winkler similarity with token sliding-window matching (achieves **0.987** on genuine matches while rejecting phonetic decoys at **< 0.89**).
+4. **`validate_gstin_checksum(gstin: str) -> bool`**: Validates 15-character Indian GSTIN structures against the official tax algorithm.
+
+---
+
 ## 🌐 4 Live Keyless Public APIs
 
 Praman integrates 4 public endpoints (`Auth: None`) with 3.0s timeouts and deterministic fallback caches:
@@ -176,14 +162,14 @@ Praman integrates 4 public endpoints (`Auth: None`) with 3.0s timeouts and deter
 
 ## 📊 Database Schema Catalog (10,040 Total Rows)
 
-| Table Name | Rows | Description & Key Columns |
-| :--- | :--- | :--- |
-| `bank_statement` | 4,000 | `row_id`, `txn_date`, `narration`, `withdrawal`, `deposit`, `running_balance`, `ifsc_code`. |
-| `tally_invoices` | 2,000 | `invoice_id`, `invoice_date`, `vendor_name`, `vendor_gstin`, `taxable_value`, `igst_amount`, `total_amount`, `vendor_ifsc`, `payout_status`. |
-| `gstr2b_tax` | 2,000 | `gstr2b_id`, `gstin_supplier`, `invoice_num`, `invoice_date`, `itc_eligible_amount`, `filing_status`. |
-| `razorpay_upi` | 2,000 | `payment_id`, `order_id`, `created_at`, `gross_amount`, `fee_mdr`, `net_settlement`, `status`, `rrn_utr`, `customer_vpa`. |
-| `cashflow_commitments` | 20 | `commitment_id`, `due_date`, `amount`, `commitment_type`, `priority`, `lender_or_payee`. |
-| `company_policies` | 20 | `policy_id`, `category`, `rule_text`, `threshold_inr`, `action_required`. |
+| Table Name | Rows | Description & Key Columns | Invariant Verified |
+| :--- | :--- | :--- | :--- |
+| `bank_statement` | 4,000 | `row_id`, `txn_date`, `narration`, `withdrawal`, `deposit`, `running_balance`, `ifsc_code`. | Strictly positive running balance ($₹2.5\text{L} \le \text{bal} \le ₹18.5\text{L}$), mutually exclusive debit/credit, natural final balance $₹3,12,450.00$. |
+| `tally_invoices` | 2,000 | `invoice_id`, `invoice_date`, `vendor_name`, `vendor_gstin`, `taxable_value`, `igst_amount`, `total_amount`, `vendor_ifsc`, `payout_status`. | Three-way match ready with GSTR-2B and bank debits. |
+| `gstr2b_tax` | 2,000 | `gstr2b_id`, `gstin_supplier`, `invoice_num`, `invoice_date`, `itc_eligible_amount`, `filing_status`. | CGST Section 16(2)(aa) statutory reflection baseline. |
+| `razorpay_upi` | 2,000 | `payment_id`, `order_id`, `created_at`, `gross_amount`, `mdr_fee`, `gst_on_fee`, `net_settlement`, `status`, `rrn_utr`, `customer_vpa`. | **Zero MDR mandate** (`mdr_fee = 0.0`, `net_settlement = gross_amount`). 90.08% (>85%) bank statement reconciliation coverage. |
+| `cashflow_commitments` | 20 | `commitment_id`, `due_date`, `amount`, `commitment_type`, `priority`, `lender_or_payee`. | Prioritized debt service schedules (HDFC Loan EMI ₹1,10,000.00). |
+| `company_policies` | 20 | `policy_id`, `domain`, `title`, `rule_body`, `section_ref`. | Statutory CGST Sec 16(2)(aa)/16(4) policies and liquidity reserve policies. |
 
 ---
 
@@ -192,21 +178,32 @@ Praman integrates 4 public endpoints (`Auth: None`) with 3.0s timeouts and deter
 ### Scenario 1: Missing GSTR-2B ITC Hold (`CASE-GST-104`)
 - **Vendor:** Sri Balaji Enterprises (`33AABCS1429B1Z2`, IFSC: `KVBL0001245`).
 - **Disputed Invoice:** `INV-2026-104` for **₹1,84,000.00** (Taxable ₹1,55,932.20 + IGST ₹28,067.80).
-- **Core Discrepancy:** Missing in GSTR-2B portal (`itc_eligible = ₹0.00`). Disbursing full payout violates CGST Sec 16(2)(aa) and Rule 36(4).
-- **Cashflow Impact:** Current balance **₹3,10,000.00**; Critical HDFC Business Loan EMI **₹1,10,000.00** due in 7 days.
-  - *Full Payout:* Leaves only ₹16,000.00 free cash (**1.15x EMI coverage** $\rightarrow$ `CRITICAL_DEFAULT_RISK`).
-  - *Praman Withholding:* Holds ₹28,067.80 GST portion; preserves ₹44,067.80 free cash (**1.40x EMI coverage**).
-  - *Full Hold pending filing:* Preserves ₹2,00,000.00 post-EMI free cash (**2.82x EMI coverage**).
+- **Core Discrepancy:** Missing in GSTR-2B portal (`itc_eligible = ₹0.00`). Under Section 16(2)(aa) of the CGST Act, 2017, Input Tax Credit cannot be availed in GSTR-3B without GSTR-2B reflection. Paying the full invoice before filing puts **₹28,067.80 of operating working capital at risk (blocked until vendor files GSTR-1, subject to Section 16(4) 30th November statutory deadline)**.
+- **Cashflow Impact:** Current balance **₹3,12,450.00**; Critical HDFC Business Loan EMI **₹1,10,000.00** due in 7 days.
+  - *Full Payout:* Leaves ₹1,28,450.00 cash, post-EMI buffer ₹18,450.00 (**1.17x EMI coverage** $\rightarrow$ `CRITICAL_DEFAULT_RISK`).
+  - *Praman Withholding:* Holds ₹28,067.80 GST portion; leaves ₹1,56,517.80 cash, post-EMI buffer ₹46,517.80 (**1.42x EMI coverage**).
+  - *Conservative Full Hold pending filing:* Preserves ₹3,12,450.00 operating cash, post-EMI buffer ₹2,02,450.00 (**2.84x EMI coverage**).
 
 ### Scenario 2: UPI Switch Double-Debit Dispute (`CASE-UPI-209`)
 - **Customer Dispute:** Double-debit of **₹14,500.00** on 2026-11-14.
-- **Evidence:** Gateway logs show Attempt 1 (`432910485711`) failed at NPCI switch node (`net = ₹0.00`). Attempt 2 (`432910485799`) succeeded and credited net ₹14,157.80 into HDFC nodal account (`HDFC0000240`).
+- **Evidence:** Gateway logs show Attempt 1 (`432910485711`) failed at NPCI switch node (`status = failed_at_switch`). Attempt 2 (`432910485799`) succeeded and credited net ₹14,500.00 (Zero MDR under MoF Jan 2020 mandate) into HDFC clearing account (`HDFC0000240`).
 - **Verdict:** Reject merchant refund (avoids double loss); transmit NPCI failure clearing proof for automatic T+1 bank reversal.
 
 ### Scenario 3: B2B SLA Downtime Pro-Rata Credit (`CASE-SLA-302`)
 - **Vendor:** CloudSphere Infrastructure Solutions Pvt Ltd (`INV-2026-881`, ₹84,000.00).
 - **Evidence:** Outage violated 99.5% uptime commitment. Policy `POL-SLA-01` (`SEC-4.2`) mandates pro-rata service credit of ₹5,600.00 via debit note.
 - **Verdict:** Issue Debit Note `DN-2026-881` for ₹5,600.00 and disburse net ₹78,400.00.
+
+---
+
+## 🎯 Unscripted Custom Case & Ad-Hoc Tester
+
+Judges can execute completely unscripted investigations on custom or unseen data via:
+1. `POST /api/cases/custom`: Accepts `{"query": str, "raw_narration": str | None}` and executes evidence-grounded branching:
+   - **0 rows matched (e.g. fake UTR `999999999999`):** Verdict `NOT_FOUND_IN_LEDGER` (₹0.00 at risk, zero fabricated citations).
+   - **Matched & Reconciled (clean filed invoice like `INV-2026-0037`):** Verdict `VERIFIED_SAFE_TO_PAY` (₹0.00 hold).
+   - **Matched with Discrepancy (unfiled tax or failed switch):** Verdict `HOLD_DISPUTED_PORTION` with exact mathematical delta hold.
+2. `POST /api/tools/test-narration`: Instant ad-hoc parser testing `extract_utr`, `norm_indic_vendor`, and `jw_sim` against any raw string.
 
 ---
 
@@ -229,45 +226,17 @@ The script automatically verifies/generates the 10,040 rows in `praman-data/`, s
 
 ---
 
-### Method B: Manual Step-by-Step
-
-#### 1. Setup Data & Analytical Plane:
-```bash
-# Generate 10,040 synthetic Indian financial rows
-python praman-data/generator.py
-python praman-data/patch_scenarios.py
-python praman-data/seed_duckdb.py
-```
-
-#### 2. Start FastAPI Backend:
-```bash
-cd praman-api
-pip install -r requirements.txt
-# Windows PowerShell:
-$env:PYTHONPATH="src"; python -m uvicorn praman_api.main:app --host 127.0.0.1 --port 8000
-# Linux/macOS:
-PYTHONPATH="src" python3 -m uvicorn praman_api.main:app --host 127.0.0.1 --port 8000
-```
-
-#### 3. Start React Frontend:
-```bash
-cd praman-ui
-npm install
-npm run dev -- --port 5173
-```
-Open **[http://localhost:5173](http://localhost:5173)** in your browser.
-
----
-
 ## 🧪 Comprehensive Verification Suite
 
-Run the full pytest suite (all 29 tests pass with zero `.env` keys required):
+Run the full pytest suite (all 35 tests pass with zero `.env` keys required):
 
 ```powershell
-$env:PYTHONPATH="praman-api/src"; python -m pytest praman-api/tests/ -v
+python -m pytest praman-api/tests/ -v
 ```
 
 ```
+praman-api/tests/test_agent_engine.py::test_pii_redaction PASSED
+praman-api/tests/test_agent_engine.py::test_intent_parsing PASSED
 praman-api/tests/test_agent_engine.py::test_cashflow_math_case_gst_104 PASSED
 praman-api/tests/test_agent_engine.py::test_format_inr PASSED
 praman-api/tests/test_agent_engine.py::test_citation_tracker PASSED
@@ -275,12 +244,16 @@ praman-api/tests/test_agent_engine.py::test_verify_ifsc_live_fallback PASSED
 praman-api/tests/test_agent_engine.py::test_investigation_stream_case_gst_104 PASSED
 praman-api/tests/test_agent_engine.py::test_investigation_stream_case_upi_209 PASSED
 praman-api/tests/test_agent_engine.py::test_investigation_stream_case_sla_302 PASSED
+praman-api/tests/test_agent_engine.py::test_investigation_stream_custom_case_not_found PASSED
+praman-api/tests/test_agent_engine.py::test_investigation_stream_custom_case_verified_safe_to_pay PASSED
 praman-api/tests/test_api_endpoints.py::test_api_health PASSED
 praman-api/tests/test_api_endpoints.py::test_list_cases PASSED
 praman-api/tests/test_api_endpoints.py::test_trigger_case PASSED
 praman-api/tests/test_api_endpoints.py::test_stream_investigation PASSED
 praman-api/tests/test_api_endpoints.py::test_get_citation_detail PASSED
 praman-api/tests/test_api_endpoints.py::test_approve_case_action PASSED
+praman-api/tests/test_api_endpoints.py::test_create_custom_case_and_stream PASSED
+praman-api/tests/test_api_endpoints.py::test_narration_tester_tool PASSED
 praman-api/tests/test_duckdb_plane.py::test_guardrail_sum_running_balance PASSED
 praman-api/tests/test_duckdb_plane.py::test_guardrail_cartesian_fanout_threshold PASSED
 praman-api/tests/test_duckdb_plane.py::test_guardrail_mutation_prevention PASSED
@@ -298,7 +271,7 @@ praman-api/tests/test_udfs.py::test_norm_indic_vendor PASSED
 praman-api/tests/test_udfs.py::test_jw_sim PASSED
 praman-api/tests/test_udfs.py::test_validate_gstin_checksum PASSED
 
-======================= 29 passed in 69.06s =======================
+====================== 35 passed in 64.35s ======================
 ```
 
 ---
@@ -310,17 +283,18 @@ Praman-AI/
 ├── README.md                          # Comprehensive Arthaton Documentation
 ├── start.sh                           # 1-Click Startup for Unix/macOS/WSL
 ├── start.ps1                          # 1-Click Startup for Windows PowerShell
+├── .env.example                       # Documented keyless configuration
 ├── .gitignore
 ├── praman-data/                       # Data Generation & DuckDB Storage
 │   ├── generator.py                   # Generates 10,040 rows (seed=42)
-│   ├── patch_scenarios.py             # Deterministic injection of canonical scenarios
+│   ├── patch_scenarios.py             # Invariant assertion & scenario patcher
 │   ├── seed_duckdb.py                 # DuckDB physical loader & table validator
 │   ├── praman.duckdb                  # Physical DuckDB columnar database
 │   └── raw_csvs/                      # 6 Source CSV files (bank, tally, gstr2b, etc.)
 ├── praman-api/                        # FastAPI Backend & Neuro-Symbolic Agent Engine
 │   ├── pyproject.toml
 │   ├── requirements.txt
-│   ├── tests/                         # 29 Pytest unit & integration tests
+│   ├── tests/                         # 35 Pytest unit & integration tests
 │   │   ├── test_udfs.py
 │   │   ├── test_duckdb_plane.py
 │   │   ├── test_agent_engine.py
@@ -334,9 +308,10 @@ Praman-AI/
 │       │   ├── udfs.py                # Pure Python UDFs (extract_utr, jw_sim, etc.)
 │       │   └── duckdb_plane.py        # Guardrailed DuckDB execution plane
 │       ├── agent/
-│       │   ├── prompts.py             # System prompts & few-shot financial exemplars
+│       │   ├── prompts.py             # System prompts & statutory CGST rules
 │       │   ├── tools.py               # Tool catalog exposed to planner
-│       │   └── loop.py                # Self-Healing loop & deterministic planner
+│       │   ├── llm_planner.py         # Local PII-safe parser & SQL generator
+│       │   └── loop.py                # Evidence-grounded investigation loop
 │       ├── adapters/
 │       │   ├── public_apis.py         # 4 Keyless Public APIs with offline fallback
 │       │   ├── razorpay_ifsc.py       # RBI master routing adapter
@@ -361,7 +336,7 @@ Praman-AI/
         └── components/
             ├── DemoTriggerMenu.tsx    # 1-Click Judge Scenario Bar + DuckDB stats
             ├── Workspace.tsx          # 50/50 Split Grid
-            ├── LiveSqlFeed.tsx        # Obsidian SQL Terminal & Self-Healing trace
+            ├── LiveSqlFeed.tsx        # Obsidian SQL Terminal & Guardrail trace
             ├── InvestigationBrief.tsx # Cited Dossier & Markdown memo
             ├── CitationChip.tsx       # Brand-colored citation badges
             ├── CitationDetailModal.tsx# Evidence inspection modal with UDF diff
@@ -373,14 +348,15 @@ Praman-AI/
 
 ## 🏆 Arthaton 2026 Evaluation Checklist
 
-- [x] **10,000+ Row Dataset**: 10,040 rows seeded across 6 relational tables with fixed seed (`42`).
+- [x] **10,000+ Row Dataset**: 10,040 rows seeded across 6 relational tables with verified invariants (90.08% UPI reconciliation coverage, zero MDR, positive running balance).
 - [x] **4 Indic/Financial Python UDFs**: `extract_utr`, `norm_indic_vendor`, `jw_sim`, `validate_gstin_checksum`.
 - [x] **Anti-Hallucination Guardrails**: Prohibits `SUM(running_balance)` and Cartesian joins $< 0.90$.
-- [x] **Self-Healing SQL Loop**: Naive fuzzy attempt intercepted $\rightarrow$ auto-healed into defensive CTE with window ranking.
-- [x] **Zero Mental Arithmetic**: Deterministic Python calculator enforces exact rupee liquidity math (1.15x risk vs. 1.40x protected).
-- [x] **Zero Mandatory Keys**: Seamlessly runs with 4 keyless public APIs (`Auth: None`) and deterministic symbolic planning.
+- [x] **Deterministic SQL Guardrails**: Naive fuzzy attempt intercepted $\rightarrow$ auto-healed into defensive CTE with window ranking.
+- [x] **Zero Mental Arithmetic**: Deterministic Python calculator enforces exact rupee liquidity math (1.17x risk vs. 1.42x protected).
+- [x] **Zero Mandatory Keys & Local PII Protection**: Seamlessly runs with 4 keyless public APIs (`Auth: None`), local regex PII redaction, and local deterministic symbolic planning.
+- [x] **Evidence-Grounded Custom Cases**: Data-driven verdict branching (`NOT_FOUND_IN_LEDGER`, `VERIFIED_SAFE_TO_PAY`, `HOLD_DISPUTED_PORTION`) with zero fabricated citations.
 - [x] **Editorial Financial Dossier UI**: Warm paper aesthetic, deep obsidian SQL feed, Recharts runway chart, and interactive human approval cinematic.
-- [x] **100% Test Pass Rate**: 29 automated test cases passing in CI.
+- [x] **100% Test Pass Rate**: 35 automated test cases passing cleanly.
 
 ---
 *Developed with precision for Arthaton 2026.*
