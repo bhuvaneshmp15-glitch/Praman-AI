@@ -74,11 +74,9 @@ class DuckDBPlane:
         return self._main_conn
 
     def connect(self, read_only: bool = False) -> duckdb.DuckDBPyConnection:
-        """Returns thread-isolated DuckDB cursor with all 4 semantic UDFs registered."""
+        """Returns thread-isolated DuckDB connection with all 4 semantic UDFs registered."""
         main_conn = self._get_main_conn()
-        if not hasattr(self._local, "cursor") or self._local.cursor is None:
-            self._local.cursor = main_conn.cursor()
-        return self._local.cursor
+        return main_conn.cursor()
 
     def _register_udfs(self, conn: duckdb.DuckDBPyConnection):
         """Registers the 4 pure Python UDFs into the DuckDB catalog."""
@@ -177,12 +175,6 @@ class DuckDBPlane:
 
     def close(self):
         """Closes active DuckDB connection."""
-        if hasattr(self._local, "cursor") and self._local.cursor:
-            try:
-                self._local.cursor.close()
-            except Exception:
-                pass
-            self._local.cursor = None
         if self._main_conn:
             try:
                 self._main_conn.close()

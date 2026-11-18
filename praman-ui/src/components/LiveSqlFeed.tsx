@@ -69,6 +69,86 @@ export const LiveSqlFeed: React.FC<LiveSqlFeedProps> = ({ events, isInvestigatin
         ) : (
           events.map((ev) => {
             switch (ev.type) {
+              case 'ai_extract_intake':
+                return (
+                  <div key={ev.id} className="p-3 rounded bg-blue-950/40 border border-blue-500/40 space-y-1.5">
+                    <div className="flex items-center gap-1.5 text-blue-400 text-[11px] font-bold">
+                      <Cpu className="w-3.5 h-3.5 text-blue-400" />
+                      <span>JOB A: UNSTRUCTURED INTAKE EXTRACTION (AI READS &amp; SANITIZES)</span>
+                      <span className="text-obsidian-muted font-normal ml-auto text-[10px]">
+                        {new Date(ev.timestamp).toLocaleTimeString()}
+                      </span>
+                    </div>
+                    <p className="font-sans text-xs text-blue-200 leading-relaxed">
+                      Redacting PII / account numbers and extracting structured parameters (UTR, amount, counterparty)...
+                    </p>
+                  </div>
+                );
+
+              case 'ai_intake_extracted':
+                return (
+                  <div key={ev.id} className="p-3 rounded bg-blue-950/20 border border-blue-600/30 space-y-2">
+                    <div className="flex items-center justify-between text-blue-300 text-[11px]">
+                      <span className="font-bold flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-blue-400" />
+                        STRUCTURED INTAKE REGISTERED (PII REDACTED)
+                      </span>
+                      <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-blue-900/60 text-blue-200">
+                        {ev.data.provider} ({ev.data.latency_ms}ms)
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-mono bg-black/40 p-2 rounded">
+                      <div>
+                        <span className="text-obsidian-muted block text-[10px]">UTR / RRN</span>
+                        <span className="font-bold text-white truncate block">{ev.data.extracted?.utr || 'None'}</span>
+                      </div>
+                      <div>
+                        <span className="text-obsidian-muted block text-[10px]">Amount</span>
+                        <span className="font-bold text-white truncate block">{ev.data.extracted?.amount ? `₹${ev.data.extracted.amount}` : 'None'}</span>
+                      </div>
+                      <div>
+                        <span className="text-obsidian-muted block text-[10px]">Vendor / Sender</span>
+                        <span className="font-bold text-white truncate block">{ev.data.extracted?.sender_or_vendor || 'None'}</span>
+                      </div>
+                      <div>
+                        <span className="text-obsidian-muted block text-[10px]">Invoice Ref</span>
+                        <span className="font-bold text-white truncate block">{ev.data.extracted?.invoice_id || 'None'}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+
+              case 'ai_synthesize_memo':
+                return (
+                  <div key={ev.id} className="p-3 rounded bg-purple-950/40 border border-purple-500/40 space-y-1.5">
+                    <div className="flex items-center gap-1.5 text-purple-400 text-[11px] font-bold">
+                      <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                      <span>JOB B: EXECUTIVE MEMO SYNTHESIS (AI EXPLAINS DETERMINISTIC FACTS)</span>
+                      <span className="text-obsidian-muted font-normal ml-auto text-[10px]">
+                        {new Date(ev.timestamp).toLocaleTimeString()}
+                      </span>
+                    </div>
+                    <p className="font-sans text-xs text-purple-200 leading-relaxed">
+                      Converting verified DuckDB table records and cashflow runway metrics into plain-language executive memorandum...
+                    </p>
+                  </div>
+                );
+
+              case 'ai_memo_synthesized':
+                return (
+                  <div key={ev.id} className="p-2.5 rounded bg-purple-950/20 border border-purple-600/30 flex items-center justify-between text-purple-200 text-xs">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-purple-400 flex-shrink-0" />
+                      <span>
+                        Executive Memo Synthesized: <strong className="font-mono text-purple-300">100% Provenance Citations Intact</strong>
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-900/50 text-purple-300 border border-purple-700/40 font-bold">
+                      {ev.data.provider} ({ev.data.latency_ms}ms)
+                    </span>
+                  </div>
+                );
+
               case 'thought':
                 return (
                   <div key={ev.id} className="p-3 rounded bg-[#161B22]/90 border border-[#30363D] space-y-1.5">

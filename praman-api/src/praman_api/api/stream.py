@@ -49,6 +49,18 @@ def stream_case_investigation(case_id: str):
             elif evt_type == "observation" and event.get("tool") == "fetch_live_usd_inr":
                 yield f"event: fx_retrieved\ndata: {json.dumps(event.get('result', {}))}\n\n"
 
+            elif evt_type == "action" and event.get("tool") == "ai_extract_intake":
+                yield f"event: ai_extract_intake\ndata: {json.dumps(event.get('args', {}))}\n\n"
+
+            elif evt_type == "observation" and event.get("tool") == "ai_extract_intake":
+                yield f"event: ai_intake_extracted\ndata: {json.dumps({'extracted': event.get('result', {}), 'provider': event.get('provider'), 'latency_ms': event.get('latency_ms')})}\n\n"
+
+            elif evt_type == "action" and event.get("tool") == "ai_synthesize_memo":
+                yield f"event: ai_synthesize_memo\ndata: {json.dumps(event.get('args', {}))}\n\n"
+
+            elif evt_type == "observation" and event.get("tool") == "ai_synthesize_memo":
+                yield f"event: ai_memo_synthesized\ndata: {json.dumps(event.get('result', {}))}\n\n"
+
             elif evt_type == "finding":
                 yield f"event: finding_recorded\ndata: {json.dumps(event.get('data', {}))}\n\n"
 

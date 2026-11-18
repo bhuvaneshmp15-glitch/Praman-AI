@@ -1,6 +1,7 @@
 import React from 'react';
 import { LiveSqlFeed } from './LiveSqlFeed';
 import { InvestigationBrief } from './InvestigationBrief';
+import { UnseenInputSandbox } from './UnseenInputSandbox';
 import { DiscrepancyCase, RunwayImpact, InvestigationFeedEvent } from '../types';
 
 interface WorkspaceProps {
@@ -10,6 +11,7 @@ interface WorkspaceProps {
   isInvestigating: boolean;
   onOpenCitation: (citationKey: string) => void;
   onOpenApproval: () => void;
+  onSubmitCustomCase: (query: string, rawNarration?: string) => void;
 }
 
 export const Workspace: React.FC<WorkspaceProps> = ({
@@ -19,11 +21,18 @@ export const Workspace: React.FC<WorkspaceProps> = ({
   isInvestigating,
   onOpenCitation,
   onOpenApproval,
+  onSubmitCustomCase,
 }) => {
   return (
-    <main className="flex-1 max-w-[1720px] w-full mx-auto p-4 sm:p-6 lg:p-8">
+    <main className="flex-1 max-w-[1720px] w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col">
+      {/* Prominent Unseen Input Sandbox */}
+      <UnseenInputSandbox
+        isInvestigating={isInvestigating}
+        onSubmit={onSubmitCustomCase}
+      />
+
       {/* 50/50 Left/Right Split Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-[calc(100vh-140px)] min-h-[680px]">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 min-h-[640px]">
         {/* Left Column (5 of 12 columns): Obsidian SQL & UDF Terminal */}
         <section className="lg:col-span-5 h-full">
           <LiveSqlFeed

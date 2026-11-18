@@ -14,9 +14,13 @@ class Settings(BaseSettings):
     DUCKDB_PATH: str = str(BASE_DIR / "praman-data" / "praman.duckdb")
     RAW_CSVS_DIR: str = str(BASE_DIR / "praman-data" / "raw_csvs")
     
-    # LLM Settings
+    # LLM Settings (OpenAI-compatible multi-provider support with local fallback)
+    GROQ_API_KEY: str = ""
+    OPENROUTER_API_KEY: str = ""
+    OPENAI_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
-    LLM_MODEL: str = "gemini-2.5-flash"
+    LLM_PROVIDER: str = "auto"
+    LLM_MODEL: str = ""
     
     # CORS
     CORS_ORIGINS: List[str] = [

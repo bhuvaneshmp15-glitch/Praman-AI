@@ -39,7 +39,7 @@ export interface CitationItem {
 export interface BriefVerdict {
   status: string;
   headline: string;
-  decision: string;
+  decision: 'HOLD_DISPUTED_PORTION' | 'NO_DISCREPANCY_FOUND' | 'NOT_FOUND_IN_STATEMENT' | string;
   markdown_brief: string;
   actions: ActionPlan[];
   citations: CitationItem[];
@@ -111,7 +111,22 @@ export interface SqlAttemptEvent {
 
 export interface InvestigationFeedEvent {
   id: string;
-  type: 'thought' | 'sql_attempt' | 'sql_retry' | 'ifsc_verified' | 'pincode_verified' | 'breach_checked' | 'fx_retrieved' | 'finding_recorded' | 'runway_calculated' | 'brief_completed';
+  type:
+    | 'thought'
+    | 'ai_extract_intake'
+    | 'ai_intake_extracted'
+    | 'ai_synthesize_memo'
+    | 'ai_memo_synthesized'
+    | 'sql_attempt'
+    | 'sql_retry'
+    | 'ifsc_verified'
+    | 'pincode_verified'
+    | 'breach_checked'
+    | 'fx_retrieved'
+    | 'finding_recorded'
+    | 'runway_calculated'
+    | 'verdict'
+    | 'brief_completed';
   timestamp: string;
   data: any;
 }

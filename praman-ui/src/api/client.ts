@@ -29,6 +29,16 @@ export async function triggerCase(scenarioId: string): Promise<{ case: Discrepan
   return res.json();
 }
 
+export async function triggerCustomCase(query: string, rawNarration?: string): Promise<{ case: DiscrepancyCase; stream_url: string }> {
+  const res = await fetch(`${API_BASE}/cases/custom`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query, raw_narration: rawNarration }),
+  });
+  if (!res.ok) throw new Error(`Trigger custom case failed: ${res.statusText}`);
+  return res.json();
+}
+
 export async function fetchCitation(caseId: string, citationKey: string): Promise<CitationDetailResponse> {
   // Encode # as %23 if present in key
   const safeKey = citationKey.replace('#', '%23');
@@ -58,6 +68,8 @@ export function subscribeToCaseStream(
   const eventTypes = [
     'trigger_received',
     'agent_thought',
+    'ai_extract_intake',
+    'ai_intake_extracted',
     'sql_attempt',
     'ifsc_verified',
     'pincode_verified',
@@ -65,6 +77,8 @@ export function subscribeToCaseStream(
     'fx_retrieved',
     'finding_recorded',
     'runway_calculated',
+    'ai_synthesize_memo',
+    'ai_memo_synthesized',
     'brief_completed'
   ];
 

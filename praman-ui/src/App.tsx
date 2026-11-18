@@ -16,6 +16,7 @@ import {
   fetchCases,
   fetchCase,
   triggerCase,
+  triggerCustomCase,
   fetchCitation,
   approveCase,
   subscribeToCaseStream,
@@ -132,6 +133,69 @@ export const App: React.FC = () => {
     }
   };
 
+  // Custom Unseen Case Trigger
+  const handleTriggerCustomCase = async (query: string, rawNarration?: string) => {
+    if (streamUnsubRef.current) {
+      streamUnsubRef.current();
+      streamUnsubRef.current = null;
+    }
+
+    setIsInvestigating(true);
+    setActiveScenarioId('CUSTOM');
+    setFeedEvents([]);
+    setRunwayData(null);
+
+    try {
+      const res = await triggerCustomCase(query, rawNarration);
+      setCurrentCase(res.case);
+
+      // Start SSE stream for custom case
+      const unsub = subscribeToCaseStream(
+        res.case.case_id,
+        (eventType, data) => {
+          const newEvent: InvestigationFeedEvent = {
+            id: `${Date.now()}-${Math.random()}`,
+            type: eventType as any,
+            timestamp: new Date().toISOString(),
+            data,
+          };
+
+          setFeedEvents((prev) => [...prev, newEvent]);
+
+          if (eventType === 'runway_calculated') {
+            setRunwayData(data);
+          }
+
+          if (eventType === 'brief_completed') {
+            setCurrentCase((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    status: 'BRIEF_READY',
+                    brief: data,
+                    actions: data.actions || [],
+                    citations: data.citations || [],
+                  }
+                : null
+            );
+          }
+        },
+        (error) => {
+          console.error('SSE Stream error:', error);
+          setIsInvestigating(false);
+        },
+        () => {
+          setIsInvestigating(false);
+        }
+      );
+
+      streamUnsubRef.current = unsub;
+    } catch (err) {
+      console.error('Failed to trigger custom case:', err);
+      setIsInvestigating(false);
+    }
+  };
+
   // Citation Click
   const handleOpenCitation = async (citationKey: string) => {
     if (!currentCase) return;
@@ -177,6 +241,7 @@ export const App: React.FC = () => {
         isInvestigating={isInvestigating}
         onOpenCitation={handleOpenCitation}
         onOpenApproval={() => setIsApprovalOpen(true)}
+        onSubmitCustomCase={handleTriggerCustomCase}
       />
 
       {/* Citation Evidence Deep-Dive Modal */}

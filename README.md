@@ -1,13 +1,13 @@
 # Praman (प्रमाण)
 ### Autonomous B2B Financial Reconciliation & Cash-Flow Protection Engine for Indian SMEs
-> **Built for Arthaton 2026** · *Zero-Key Autonomous Neuro-Symbolic Architecture*
+> **Built for Arthaton 2026** · *Neuro-Symbolic Architecture: "AI Reads & Explains · Deterministic Code Decides"*
 
 [![Python 3.13](https://img.shields.io/badge/Python-3.13+-3776AB.svg?style=flat&logo=python&logoColor=white)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![DuckDB](https://img.shields.io/badge/DuckDB-1.1.0-FFF000.svg?style=flat&logo=duckdb&logoColor=black)](https://duckdb.org)
 [![Vite + React](https://img.shields.io/badge/Frontend-React_18_+_Vite-61DAFB.svg?style=flat&logo=react&logoColor=black)](https://vitejs.dev)
-[![Tests](https://img.shields.io/badge/Tests-35%20Passed%20(100%25)-success.svg)](https://pytest.org)
-[![Zero API Keys](https://img.shields.io/badge/Keys_Required-ZERO_(Keyless_APIs)-brightgreen.svg)](#-live-keyless-public-apis)
+[![Tests](https://img.shields.io/badge/Tests-37%20Passed%20(100%25)-success.svg)](https://pytest.org)
+[![Zero API Keys Required](https://img.shields.io/badge/Keys_Required-ZERO_(Keyless_APIs)-brightgreen.svg)](#-live-keyless-public-apis)
 
 ---
 
@@ -35,7 +35,8 @@ Standard enterprise solutions fail Indian finance teams because:
  │  ┌────────────────────────────────────────┐  ┌──────────────────────────────────────┐  │
  │  │      Live DuckDB SQL & UDF Feed        │  │     Cited Executive Decision Brief   │  │
  │  │  • Real-time SSE Agent Reasoning Trace │  │  • Clickable Audit Citation Chips    │  │
- │  │  • Deterministic SQL Guardrail Checks  │  │  • 30-Day Loan EMI Runway Widget     │  │
+ │  │  • Deterministic SQL Guardrail Checks  │  │  • Verification Checklist & Safety   │  │
+ │  │  • AI Intake / Synthesis Trace Badges  │  │  • 30-Day Loan EMI Runway Widget     │  │
  │  │  • Live Bank Routing / IFSC Headers    │  │  • 1-Click Human Approval Cinematic  │  │
  │  └───────────────────▲────────────────────┘  └──────────────────▲───────────────────┘  │
  └──────────────────────┼──────────────────────────────────────────┼──────────────────────┘
@@ -44,10 +45,11 @@ Standard enterprise solutions fail Indian finance teams because:
  │                                   PRAMAN FASTAPI BACKEND                               │
  │                                                                                        │
  │   ┌────────────────────────────────────────────────────────────────────────────────┐   │
- │   │                   Autonomous Neuro-Symbolic Agent Loop                         │   │
- │   │  • Local Intent & PII Parser (Zero external leaks · Redacts UTRs, VPAs, Accs)  │   │
- │   │  • Deterministic SQL Guardrail Check: Catches Cartesian Fanouts & Enforces CTEs │   │
- │   │  • Optional Keyed LLM (OpenAI / Gemini) with automatic PII tokenization        │   │
+ │   │           Division of Labor: "AI Reads & Explains · Code Decides"              │   │
+ │   │  • Job A: ai_extract_intake (Noisy Bank SMS/Narration -> JSON · PII Redacted)  │   │
+ │   │  • Job B: ai_synthesize_memo (Verified Table Facts -> Cited Executive Memo)    │   │
+ │   │  • Multi-Provider: Groq, OpenRouter, OpenAI, Gemini + Offline Deterministic     │   │
+ │   │  • Deterministic Guardrail Check: Catches Cartesian Fanouts & Enforces CTEs    │   │
  │   └───────────────────▲─────────────────────────────────────────▲──────────────────┘   │
  │                       │                                         │                      │
  │   ┌───────────────────┴───────────────────────┐ ┌───────────────┴──────────────────┐   │
@@ -56,6 +58,7 @@ Standard enterprise solutions fail Indian finance teams because:
  │   │  • EMI Debt Service Coverage Ratios       │ │  • India Post API (GST State Match)│  │
  │   │  • Verified Rupee Math Formulae           │ │  • Frankfurter FX (USD/INR Rate)  │   │
  │   └───────────────────────────────────────────┘ │  • XposedOrNot (Vendor BEC Audit) │   │
+ │                                                 │  • Fast 2.0s Timeout + Venue Cache│   │
  │                                                 └───────────────────────────────────┘   │
  │   ┌─────────────────────────────────────────────────────────────────────────────────┐   │
  │   │                     DuckDB Semantic Data Plane (praman.duckdb)                  │   │
@@ -167,7 +170,7 @@ Praman integrates 4 public endpoints (`Auth: None`) with 3.0s timeouts and deter
 | `bank_statement` | 4,000 | `row_id`, `txn_date`, `narration`, `withdrawal`, `deposit`, `running_balance`, `ifsc_code`. | Strictly positive running balance ($₹2.5\text{L} \le \text{bal} \le ₹18.5\text{L}$), mutually exclusive debit/credit, natural final balance $₹3,12,450.00$. |
 | `tally_invoices` | 2,000 | `invoice_id`, `invoice_date`, `vendor_name`, `vendor_gstin`, `taxable_value`, `igst_amount`, `total_amount`, `vendor_ifsc`, `payout_status`. | Three-way match ready with GSTR-2B and bank debits. |
 | `gstr2b_tax` | 2,000 | `gstr2b_id`, `gstin_supplier`, `invoice_num`, `invoice_date`, `itc_eligible_amount`, `filing_status`. | CGST Section 16(2)(aa) statutory reflection baseline. |
-| `razorpay_upi` | 2,000 | `payment_id`, `order_id`, `created_at`, `gross_amount`, `mdr_fee`, `gst_on_fee`, `net_settlement`, `status`, `rrn_utr`, `customer_vpa`. | **Zero MDR mandate** (`mdr_fee = 0.0`, `net_settlement = gross_amount`). 90.08% (>85%) bank statement reconciliation coverage. |
+| `razorpay_upi` | 2,000 | `payment_id`, `order_id`, `created_at`, `gross_amount`, `mdr_fee`, `gst_on_fee`, `net_settlement`, `status`, `rrn_utr`, `customer_vpa`. | **Zero MDR mandate** (`mdr_fee = 0.0`, `net_settlement = gross_amount`). Reconciles with HDFC Bank Statement settlements via 12-digit RRN/UTR. |
 | `cashflow_commitments` | 20 | `commitment_id`, `due_date`, `amount`, `commitment_type`, `priority`, `lender_or_payee`. | Prioritized debt service schedules (HDFC Loan EMI ₹1,10,000.00). |
 | `company_policies` | 20 | `policy_id`, `domain`, `title`, `rule_body`, `section_ref`. | Statutory CGST Sec 16(2)(aa)/16(4) policies and liquidity reserve policies. |
 
@@ -196,14 +199,29 @@ Praman integrates 4 public endpoints (`Auth: None`) with 3.0s timeouts and deter
 
 ---
 
-## 🎯 Unscripted Custom Case & Ad-Hoc Tester
+## 🎯 Unscripted Custom Case & "Paste Unseen Input" Sandbox
 
-Judges can execute completely unscripted investigations on custom or unseen data via:
-1. `POST /api/cases/custom`: Accepts `{"query": str, "raw_narration": str | None}` and executes evidence-grounded branching:
-   - **0 rows matched (e.g. fake UTR `999999999999`):** Verdict `NOT_FOUND_IN_LEDGER` (₹0.00 at risk, zero fabricated citations).
-   - **Matched & Reconciled (clean filed invoice like `INV-2026-0037`):** Verdict `VERIFIED_SAFE_TO_PAY` (₹0.00 hold).
-   - **Matched with Discrepancy (unfiled tax or failed switch):** Verdict `HOLD_DISPUTED_PORTION` with exact mathematical delta hold.
-2. `POST /api/tools/test-narration`: Instant ad-hoc parser testing `extract_utr`, `norm_indic_vendor`, and `jw_sim` against any raw string.
+Judges and evaluators can execute completely unscripted investigations on unseen, real-world data directly in the UI or via API:
+
+### 1. Interactive Sandbox in UI:
+Located at the top of the workspace with 3 instant 1-click test buttons:
+- **Sample 1: Real Ledger UTR (`432910485799`)**: Reconciles clean settlement with Ganpati Trading Co $\rightarrow$ yields `NO_DISCREPANCY_FOUND` and displays the **Verification Checklist**.
+- **Sample 2: Unseen Messy SMS (`Dear SBI User, your A/c XX4892 debited by Rs 18,400...`)**: AI Job A tokenizes/redacts PII, extracts parameters, and audits ledger $\rightarrow$ enforces safe hold.
+- **Sample 3: Unrecorded UTR (`999999999999`)**: Missing from bank statement $\rightarrow$ yields `NOT_FOUND_IN_STATEMENT` with safe guidance protocol.
+
+### 2. Evidence-Grounded Branching:
+- **0 rows matched (e.g. fake UTR `999999999999`):** Verdict `NOT_FOUND_IN_STATEMENT`:
+  > *"Not found in the statement as of 2026-11-18. Ask the counterparty for the 12-digit UTR / bank advice proof and recheck after the next NEFT/UPI settlement cycle."*
+  ₹0.00 at risk, zero fabricated citations, zero speculative claims.
+- **Matched & Reconciled (clean filed invoice like `INV-2026-0037`):** Verdict `NO_DISCREPANCY_FOUND`:
+  Renders the **Reconciliation Verification Checklist**:
+  - *Checked & Matched (Automated):* Bank statement settlement verified, UPI RRN confirmed, Tally invoice matches tax records, GSTR-2B confirmed `FILED`.
+  - *Requires Human Sign-off:* Prior FY duplicate checks, beneficiary account ownership verification, physical goods (GRN) acceptance.
+- **Matched with Discrepancy (unfiled tax or failed switch):** Verdict `HOLD_DISPUTED_PORTION` with exact mathematical delta hold.
+
+### 3. Live Endpoints:
+- `POST /api/cases/custom`: Accepts `{"query": str, "raw_narration": str | None}` for unscripted investigations.
+- `POST /api/tools/test-narration`: Instant ad-hoc parser testing `extract_utr`, `norm_indic_vendor`, and `jw_sim` against any raw string.
 
 ---
 

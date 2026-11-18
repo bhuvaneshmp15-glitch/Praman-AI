@@ -5,6 +5,32 @@ from praman_api.services.citations import CitationTracker
 from praman_api.agent.tools import verify_ifsc_live, calculate_emi_runway
 from praman_api.agent.loop import run_investigation_sync
 from praman_api.agent.llm_planner import redact_pii, parse_investigation_intent
+from praman_api.services.llm_service import ai_extract_intake, ai_synthesize_memo
+
+
+def test_ai_extract_intake():
+    """Verify Job 1: AI unstructured intake parser with PII redaction and entity extraction."""
+    raw_sms = "Dear SBI User, your A/c XX4892 debited by Rs 18,400.00 on 18-Nov-26 transfer to SRI BALAJI ENT UPI Ref 632819045112"
+    res = ai_extract_intake(raw_sms)
+    assert res["extracted"]["utr"] == "632819045112"
+    assert "BALAJI" in res["extracted"]["sender_or_vendor"]
+    assert res["provider"] in ("local_deterministic_parser", "groq", "openrouter", "openai", "gemini")
+
+
+def test_ai_synthesize_memo():
+    """Verify Job 2: AI plain-language executive memorandum synthesis."""
+    ctx = {
+        "case_id": "CASE-TEST-001",
+        "entity": "Sri Balaji Enterprises",
+        "decision": "NO_DISCREPANCY_FOUND",
+        "ref_id": "INV-2026-0037",
+        "amount": 54131.69,
+        "summary_text": "Verify clean invoice"
+    }
+    res = ai_synthesize_memo(ctx)
+    assert "Executive Audit Memorandum" in res["memo"]
+    assert "Verification Checklist" in res["memo"]
+    assert res["provider"] in ("local_deterministic_memo", "groq", "openrouter", "openai", "gemini")
 
 
 def test_pii_redaction():
@@ -178,7 +204,7 @@ def test_investigation_stream_case_sla_302():
 
 
 def test_investigation_stream_custom_case_not_found():
-    """Verify that fake UTR 999999999999 yields NOT_FOUND_IN_LEDGER with 0 citations."""
+    """Verify that fake UTR 999999999999 yields NOT_FOUND_IN_STATEMENT with 0 citations."""
     case_data = {
         "case_id": "CASE-CUSTOM-FAKE",
         "description": "Investigate fake payment proof with UTR 999999999999",
@@ -192,8 +218,8 @@ def test_investigation_stream_custom_case_not_found():
     verdicts = [e for e in events if e.get("type") == "verdict"]
     assert len(verdicts) == 1
     vdata = verdicts[0]["data"]
-    assert vdata["decision"] == "NOT_FOUND_IN_LEDGER"
-    assert "0 matching records found" in vdata["markdown_brief"]
+    assert vdata["decision"] == "NOT_FOUND_IN_STATEMENT"
+    assert "Not found in the statement as of" in vdata["markdown_brief"]
 
     # Verify zero citations registered
     findings = [e for e in events if e.get("type") == "finding"]
@@ -201,7 +227,7 @@ def test_investigation_stream_custom_case_not_found():
 
 
 def test_investigation_stream_custom_case_verified_safe_to_pay():
-    """Verify that clean filed invoice yields VERIFIED_SAFE_TO_PAY with zero hold."""
+    """Verify that clean filed invoice yields NO_DISCREPANCY_FOUND with zero hold and checklist."""
     case_data = {
         "case_id": "CASE-CUSTOM-CLEAN",
         "description": "Verify supplier invoice INV-2026-0037 Ganpati Trading Co",
@@ -215,6 +241,7 @@ def test_investigation_stream_custom_case_verified_safe_to_pay():
     verdicts = [e for e in events if e.get("type") == "verdict"]
     assert len(verdicts) == 1
     vdata = verdicts[0]["data"]
-    assert vdata["decision"] == "VERIFIED_SAFE_TO_PAY"
+    assert vdata["decision"] == "NO_DISCREPANCY_FOUND"
     assert "[CIT-1]" in vdata["markdown_brief"]
+    assert "Verification Checklist" in vdata["markdown_brief"]
     assert "₹0.00" in vdata["markdown_brief"]

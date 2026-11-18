@@ -9,7 +9,8 @@ from praman_api.config import settings
 from praman_api.engine.duckdb_plane import db_plane, SqlSemanticError
 from praman_api.services.citations import citation_service
 from praman_api.services.cashflow_math import compute_runway_impact, format_inr
-from praman_api.agent.llm_planner import plan_sql_with_llm, _build_deterministic_sql
+from praman_api.agent.llm_planner import plan_sql_with_llm, _build_deterministic_sql, redact_pii
+from praman_api.services.llm_service import ai_extract_intake, ai_synthesize_memo
 from praman_api.agent.tools import (
     duckdb_sql,
     record_finding,
@@ -274,7 +275,27 @@ def run_investigation_sync(case_id: str, case_data: Optional[Dict[str, Any]] = N
         )
         yield {"type": "finding", "data": cit4}
 
-        # STEP 9: Conclude Brief
+        # STEP 9: AI Executive Memorandum Synthesis (AI Reads & Explains · Deterministic Code Decides)
+        yield {
+            "type": "action",
+            "tool": "ai_synthesize_memo",
+            "args": {"case_id": "CASE-GST-104", "purpose": "Synthesize Plain-Language Executive Memorandum"}
+        }
+        memo_res = ai_synthesize_memo({
+            "case_id": "CASE-GST-104",
+            "entity": "Sri Balaji Enterprises",
+            "decision": "HOLD_GST_PORTION",
+            "ref_id": "INV-2026-104",
+            "summary_text": "Missing in GSTR-2B; Sec 16(2)(aa) blocked ITC working-capital risk",
+            "cashflow": runway_calc["formatted"]
+        })
+        yield {
+            "type": "observation",
+            "tool": "ai_synthesize_memo",
+            "result": {"status": "synthesized", "provider": memo_res["provider"], "latency_ms": memo_res["latency_ms"]}
+        }
+
+        # STEP 10: Conclude Brief
         brief_md = f"""### Executive Reconciliation Brief: Sri Balaji Enterprises (`INV-2026-104`)
 
 #### 1. Discrepancy & Root Cause Analysis
@@ -592,13 +613,45 @@ Approving this payout would have caused an unrecoverable **₹1,25,000.00 duplic
         meta = (case_data or {}).get("scenario_metadata", {})
         query_text = meta.get("custom_query") or (case_data or {}).get("description") or case_id
         narration_text = meta.get("raw_narration")
+        raw_combined = f"{query_text} {narration_text or ''}".strip()
 
         yield {
             "type": "thought",
-            "text": f"Initiating AI-Planned Neuro-Symbolic investigation for custom case '{case_id}'. Prompt: '{query_text}'..."
+            "text": f"Initiating AI-Planned Neuro-Symbolic investigation for custom case '{case_id}' ('AI Reads & Explains · Deterministic Code Decides')..."
         }
 
-        # 1. Synthesize SQL via LLM Planner
+        # ---------------------------------------------------------------------
+        # AI JOB 1: Unstructured Intake Extraction (ai_extract_intake)
+        # ---------------------------------------------------------------------
+        intake_res = ai_extract_intake(raw_combined)
+        yield {
+            "type": "action",
+            "tool": "ai_extract_intake",
+            "args": {
+                "raw_input_preview": redact_pii(raw_combined[:120]),
+                "provider": intake_res["provider"],
+                "model": intake_res["model"]
+            }
+        }
+        yield {
+            "type": "observation",
+            "tool": "ai_extract_intake",
+            "result": intake_res["extracted"],
+            "provider": intake_res["provider"],
+            "latency_ms": intake_res["latency_ms"]
+        }
+
+        extracted_data = intake_res["extracted"]
+        extracted_utr = extracted_data.get("utr")
+        extracted_inv = extracted_data.get("invoice_id")
+        extracted_vendor = extracted_data.get("sender_or_vendor")
+
+        yield {
+            "type": "thought",
+            "text": f"AI intake extracted: UTR={extracted_utr or 'None'}, Invoice={extracted_inv or 'None'}, Entity={extracted_vendor or 'None'}. Handing off 100% of SQL generation and matching to deterministic engine..."
+        }
+
+        # 1. Synthesize SQL via LLM Planner / Deterministic Template
         plan_result = plan_sql_with_llm(query=query_text, raw_narration=narration_text)
         planned_sql = plan_result["sql"]
         planner_src = plan_result["planner_source"]
@@ -629,40 +682,53 @@ Approving this payout would have caused an unrecoverable **₹1,25,000.00 duplic
 
         yield {"type": "observation", "tool": "duckdb_sql", "result": sql_res}
 
+        # Query latest bank statement date for accurate temporal reference
+        stmt_date = "2026-11-18"
+        try:
+            stmt_date_row = duckdb_sql("SELECT txn_date FROM bank_statement ORDER BY txn_date DESC, row_id DESC LIMIT 1;", purpose="Get latest statement date")
+            if stmt_date_row.get("rows"):
+                stmt_date = str(stmt_date_row["rows"][0][0])
+        except Exception:
+            pass
+
         # 3. Evidence-Grounded Branching
         row_count = sql_res.get("row_count", 0)
 
         # -----------------------------------------------------------------
-        # BRANCH A: 0 rows matched (Record not found in ledger / Fake UTR)
+        # BRANCH A: 0 rows matched (Record not found in statement)
         # -----------------------------------------------------------------
         if row_count == 0:
-            brief_md = f"""### Forensic Audit Brief: Unverified Ledger Record (`{case_id}`)
+            guidance_msg = f"Not found in the statement as of {stmt_date}. Ask the counterparty for the 12-digit UTR / bank advice proof and recheck after the next NEFT/UPI settlement cycle."
 
-#### 1. Investigation Findings
-Investigation triggered for: **"{query_text}"**.
-Deterministic SQL audit queries were executed across bank statements, Razorpay UPI transactions, Tally invoices, and GSTR-2B filings.
+            # AI JOB 2: Synthesize plain-language memo
+            memo_ctx = {
+                "case_id": case_id,
+                "entity": extracted_vendor or query_text,
+                "decision": "NOT_FOUND_IN_STATEMENT",
+                "ref_id": extracted_utr or extracted_inv or "",
+                "summary_text": query_text,
+                "latest_statement_date": stmt_date
+            }
+            yield {
+                "type": "action",
+                "tool": "ai_synthesize_memo",
+                "args": {"case_id": case_id, "decision": "NOT_FOUND_IN_STATEMENT"}
+            }
+            memo_res = ai_synthesize_memo(memo_ctx)
+            yield {
+                "type": "observation",
+                "tool": "ai_synthesize_memo",
+                "result": {"status": "synthesized", "provider": memo_res["provider"], "latency_ms": memo_res["latency_ms"]}
+            }
 
-- **Match Status**: **0 matching records found** in analytical ledger tables.
-- **Verification Result**: The reference entity, invoice number, or 12-digit UTR does not exist in company books or banking records.
-- **Citation Status**: Zero citations generated (no ungrounded or fabricated evidence registered).
-
-#### 2. Risk & Working Capital Assessment
-- **Amount at Risk**: ₹0.00 verified on ledger.
-- **Risk Assessment**: High probability of fictitious claim, forged payment proof, or unrecorded transaction.
-- **Protective Stance**: Retain funds; enforce mandatory documentary verification before approval.
-
-#### 3. Prescribed Actions
-1. **Reject Disbursement**: Do NOT disburse funds or release goods against unverified claims.
-2. **Demand Formal Proof**: Require counterparty to submit verifiable bank statement with valid 12-digit UTR or digitally signed tax invoice.
-"""
             actions = [
-                {"action": "REJECT_UNVERIFIED_CLAIM", "query": query_text, "reason": "RECORD_NOT_FOUND_IN_LEDGER"},
-                {"action": "DEMAND_VALID_UTR_PROOF", "case_id": case_id}
+                {"action": "DEMAND_VALID_UTR_PROOF", "case_id": case_id, "reason": guidance_msg},
+                {"action": "RECHECK_NEXT_SETTLEMENT_CYCLE", "as_of_date": stmt_date}
             ]
             verdict = conclude_brief(
-                headline=f"Unverified Claim: Record Not Found in Ledger ({case_id})",
-                decision="NOT_FOUND_IN_LEDGER",
-                markdown_brief=brief_md,
+                headline=f"Not Found in Statement as of {stmt_date} ({case_id})",
+                decision="NOT_FOUND_IN_STATEMENT",
+                markdown_brief=memo_res["memo"],
                 actions=actions
             )
             yield {"type": "verdict", "data": verdict}
@@ -719,7 +785,7 @@ Deterministic SQL audit queries were executed across bank statements, Razorpay U
             is_reconciled = True
 
         # -----------------------------------------------------------------
-        # BRANCH B: Matched & Reconciled (Safe to pay)
+        # BRANCH B: Matched & Reconciled (No Discrepancy Found)
         # -----------------------------------------------------------------
         if is_reconciled and not is_discrepancy:
             if filing_status == "FILED":
@@ -732,32 +798,35 @@ Deterministic SQL audit queries were executed across bank statements, Razorpay U
                 )
                 yield {"type": "finding", "data": cit2}
 
-            brief_md = f"""### Executive Reconciliation Brief: Reconciled & Safe to Disburse (`{case_id}`)
+            # AI JOB 2: Plain-language executive memo
+            memo_ctx = {
+                "case_id": case_id,
+                "entity": entity_desc,
+                "decision": "NO_DISCREPANCY_FOUND",
+                "ref_id": ref_id,
+                "amount": total_amt,
+                "summary_text": query_text
+            }
+            yield {
+                "type": "action",
+                "tool": "ai_synthesize_memo",
+                "args": {"case_id": case_id, "decision": "NO_DISCREPANCY_FOUND"}
+            }
+            memo_res = ai_synthesize_memo(memo_ctx)
+            yield {
+                "type": "observation",
+                "tool": "ai_synthesize_memo",
+                "result": {"status": "synthesized", "provider": memo_res["provider"], "latency_ms": memo_res["latency_ms"]}
+            }
 
-#### 1. Reconciliation Findings
-- **Matched Primary Entity**: `{entity_desc}` [CIT-1]
-- **Reference Identifier**: `{ref_id}`
-- **Transaction Amount**: ₹{total_amt:,.2f}
-- **Filing / Settlement Status**: Confirmed reconciled across ledger and tax/banking channels.
-- **Audit Verification**: Ledger entries match supporting records. No compliance flags or double-payments detected.
-
-#### 2. Cash-Flow & Liquidity Impact
-- **Disbursement Amount**: ₹{total_amt:,.2f}
-- **Hold Amount Required**: **₹0.00** (Full compliance verified).
-- **Post-Payment Liquidity**: Cash buffer remains adequate.
-
-#### 3. Prescribed Actions
-1. **Approve Disbursement**: Release payment of ₹{total_amt:,.2f} to `{entity_desc}`.
-2. **Close Reconciliation Ticket**: Update accounting status to settled.
-"""
             actions = [
                 {"action": "APPROVE_DISBURSEMENT", "reference_id": ref_id, "amount": total_amt},
                 {"action": "CLOSE_RECONCILIATION_TICKET", "case_id": case_id}
             ]
             verdict = conclude_brief(
-                headline=f"Verified Safe to Disburse: {entity_desc} ({case_id})",
-                decision="VERIFIED_SAFE_TO_PAY",
-                markdown_brief=brief_md,
+                headline=f"No Discrepancy Found: {entity_desc} ({case_id})",
+                decision="NO_DISCREPANCY_FOUND",
+                markdown_brief=memo_res["memo"],
                 actions=actions
             )
             yield {"type": "verdict", "data": verdict}
@@ -803,25 +872,28 @@ Deterministic SQL audit queries were executed across bank statements, Razorpay U
         )
         yield {"type": "finding", "data": cit2}
 
-        brief_md = f"""### Executive Reconciliation Brief: Discrepancy Hold Enforced (`{case_id}`)
+        # AI JOB 2: Plain-language executive memo
+        memo_ctx = {
+            "case_id": case_id,
+            "entity": entity_desc,
+            "decision": "HOLD_DISPUTED_PORTION",
+            "ref_id": ref_id,
+            "amount_held": hold_val,
+            "summary_text": discrepancy_reason,
+            "cashflow": runway_calc["formatted"]
+        }
+        yield {
+            "type": "action",
+            "tool": "ai_synthesize_memo",
+            "args": {"case_id": case_id, "decision": "HOLD_DISPUTED_PORTION"}
+        }
+        memo_res = ai_synthesize_memo(memo_ctx)
+        yield {
+            "type": "observation",
+            "tool": "ai_synthesize_memo",
+            "result": {"status": "synthesized", "provider": memo_res["provider"], "latency_ms": memo_res["latency_ms"]}
+        }
 
-#### 1. Discrepancy & Root Cause Analysis
-Investigation triggered for: **"{query_text}"** [CIT-1].
-- **Matched Primary Entity**: `{entity_desc}` [CIT-1]
-- **Discrepancy Detected**: {discrepancy_reason}
-- **Discrepancy Delta to Hold**: **₹{hold_val:,.2f}**
-
-#### 2. Deterministic Cash-Flow & Runway Impact
-- **Current Operating Bank Balance**: {runway_calc['formatted']['current_bank_balance']} [CIT-2]
-- **Upcoming Critical EMI Commitment**: {runway_calc['formatted']['upcoming_30d_critical_emi']} [CIT-2]
-- **Full Payout Impact**: Leaves free cash of **{runway_calc['formatted']['post_emi_free_cash_without_praman']}** ({runway_calc['formatted']['coverage_without_praman']} coverage).
-- **Protected Payout Buffer (with Praman Hold)**: Preserves **{runway_calc['formatted']['post_emi_free_cash_with_praman']}** ({runway_calc['formatted']['coverage_with_praman']} coverage).
-
-#### 3. Prescribed Actions
-1. **Hold Disputed Portion**: Withhold exactly ₹{hold_val:,.2f} from disbursement to `{entity_desc}`.
-2. **Ring-Fence EMI Liquidity**: Lock ₹{upcoming_emi:,.2f} for upcoming debt service.
-3. **Notify Counterparty**: Demand tax filing or bank switch reversal confirmation.
-"""
         actions = [
             {"action": "HOLD_PAYOUT", "reference_id": ref_id, "amount": hold_val},
             {"action": "RINGFENCE_LIQUIDITY", "commitment_id": "COM-001", "amount": upcoming_emi}
@@ -829,7 +901,7 @@ Investigation triggered for: **"{query_text}"** [CIT-1].
         verdict = conclude_brief(
             headline=f"Discrepancy Hold Enforced: {entity_desc} ({case_id})",
             decision="HOLD_DISPUTED_PORTION",
-            markdown_brief=brief_md,
+            markdown_brief=memo_res["memo"],
             actions=actions
         )
         yield {"type": "verdict", "data": verdict}
