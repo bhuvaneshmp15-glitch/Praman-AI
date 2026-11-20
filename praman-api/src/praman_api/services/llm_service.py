@@ -10,11 +10,40 @@ import os
 import re
 import json
 import time
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, List
 import httpx
 
 from praman_api.config import settings
 from praman_api.agent.llm_planner import redact_pii, parse_investigation_intent
+
+
+def verify_memo_numbers(memo_text: str, allowed_rupee_values: List[float]) -> bool:
+    """Strict post-generation guardrail: verifies that every explicit rupee figure in the LLM memo
+    is grounded in actual deterministic/computed figures (within ₹1.00 tolerance).
+    Excludes 0.0, years, statutory section numbers, or non-currency percentages.
+    """
+    if not memo_text:
+        return True
+    pattern = r"(?:₹|Rs\.?|INR)\s*([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)"
+    matches = re.findall(pattern, memo_text, re.IGNORECASE)
+    if not matches:
+        return True
+
+    allowed_set = [float(v) for v in allowed_rupee_values if v is not None]
+    allowed_set.append(0.0)
+
+    for m in matches:
+        cleaned = m.replace(",", "")
+        try:
+            val = float(cleaned)
+            if val == 0.0:
+                continue
+            # Check if within ₹1.00 of any computed/allowed figure
+            if not any(abs(val - allowed) <= 1.00 for allowed in allowed_set):
+                return False
+        except ValueError:
+            continue
+    return True
 
 
 def _get_active_provider() -> Tuple[str, str, str, str]:
@@ -51,10 +80,10 @@ def _get_active_provider() -> Tuple[str, str, str, str]:
 
 def ai_extract_intake(raw_text: str, timeout_sec: float = 2.5) -> Dict[str, Any]:
     """Job A: Reads pasted bank SMS, payment screenshot text, or unstructured narration into structured JSON.
-    Redacts sensitive account numbers and phone numbers before external dispatch.
+    Redacts sensitive account numbers and phone numbers before external dispatch, but preserves 12-digit UTRs.
     """
     start_time = time.time()
-    safe_text = redact_pii(raw_text)
+    safe_text = redact_pii(raw_text, mask_utr=False)
     provider, api_url, model, api_key = _get_active_provider()
 
     # Attempt external LLM call if provider configured
@@ -122,7 +151,9 @@ def ai_extract_intake(raw_text: str, timeout_sec: float = 2.5) -> Dict[str, Any]
 
 
 def ai_synthesize_memo(context: Dict[str, Any], timeout_sec: float = 2.5) -> Dict[str, Any]:
-    """Job B: Explains deterministic DuckDB findings and cashflow_math.py numbers in clear, cited plain English memo."""
+    """Job B: Explains deterministic DuckDB findings and cashflow_math.py numbers in clear, cited plain English memo.
+    Enforces verify_memo_numbers guardrail against financial hallucinations.
+    """
     start_time = time.time()
     provider, api_url, model, api_key = _get_active_provider()
 
@@ -132,6 +163,49 @@ def ai_synthesize_memo(context: Dict[str, Any], timeout_sec: float = 2.5) -> Dic
     findings = context.get("findings", [])
     cashflow = context.get("cashflow", {})
     citations = context.get("citations", [])
+
+    # Collect all grounded numerical rupee figures for strict verification
+    allowed_numbers: List[float] = []
+    if context.get("amount") is not None:
+        try:
+            allowed_numbers.append(float(context["amount"]))
+        except Exception:
+            pass
+    if context.get("amount_held") is not None:
+        try:
+            allowed_numbers.append(float(context["amount_held"]))
+        except Exception:
+            pass
+    if context.get("disputed_delta") is not None:
+        try:
+            allowed_numbers.append(float(context["disputed_delta"]))
+        except Exception:
+            pass
+    if context.get("itc_amount") is not None:
+        try:
+            allowed_numbers.append(float(context["itc_amount"]))
+        except Exception:
+            pass
+    for k in [
+        "current_bank_balance",
+        "upcoming_30d_critical_emi",
+        "post_emi_free_cash_without_praman",
+        "post_emi_free_cash_with_praman",
+        "cash_after_full_payout",
+        "cash_after_praman_action"
+    ]:
+        val_str = cashflow.get(k)
+        if val_str:
+            clean_val = re.sub(r"[^\d.]", "", str(val_str))
+            try:
+                allowed_numbers.append(float(clean_val))
+            except Exception:
+                pass
+    for extra in context.get("allowed_numbers", []):
+        try:
+            allowed_numbers.append(float(extra))
+        except Exception:
+            pass
 
     # If keyed LLM is configured and reachable
     if api_key and api_url:
@@ -172,13 +246,27 @@ Citations: {citations}
                     data = resp.json()
                     content = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
                     if content and len(content) > 50:
-                        return {
-                            "memo": content,
-                            "provider": provider,
-                            "model": model,
-                            "is_llm": True,
-                            "latency_ms": round((time.time() - start_time) * 1000, 2)
-                        }
+                        # Post-generation Rupee Number Guardrail
+                        if verify_memo_numbers(content, allowed_numbers):
+                            return {
+                                "memo": content,
+                                "provider": provider,
+                                "model": model,
+                                "is_llm": True,
+                                "memo_guardrail_fallback": False,
+                                "latency_ms": round((time.time() - start_time) * 1000, 2)
+                            }
+                        else:
+                            # Reject hallucinated figures and fall back to deterministic template
+                            deterministic_memo = _build_deterministic_memo(context)
+                            return {
+                                "memo": deterministic_memo,
+                                "provider": "local_deterministic_memo",
+                                "model": "offline-memo-v1",
+                                "is_llm": False,
+                                "memo_guardrail_fallback": True,
+                                "latency_ms": round((time.time() - start_time) * 1000, 2)
+                            }
         except Exception:
             pass
 
@@ -189,19 +277,22 @@ Citations: {citations}
         "provider": "local_deterministic_memo",
         "model": "offline-memo-v1",
         "is_llm": False,
+        "memo_guardrail_fallback": False,
         "latency_ms": round((time.time() - start_time) * 1000, 2)
     }
 
 
 def _build_deterministic_memo(context: Dict[str, Any]) -> str:
-    """Builds a deterministic, high-clarity executive memorandum."""
+    """Builds a deterministic, high-clarity executive memorandum covering all strict audit decisions."""
     case_id = context.get("case_id", "CASE-AUDIT")
     entity = context.get("entity", "Counterparty")
-    decision = context.get("decision", "REVIEW")
+    decision = context.get("decision", "INCONCLUSIVE_MANUAL_REVIEW")
     ref_id = context.get("ref_id", "")
     summary_text = context.get("summary_text", "")
     runway = context.get("cashflow", {})
     stmt_date = context.get("latest_statement_date", "2026-11-18")
+    amt_held = float(context.get("amount_held") or 0.0)
+    total_amt = float(context.get("amount") or 0.0)
 
     if decision == "NOT_FOUND_IN_STATEMENT":
         return f"""### Executive Audit Memorandum: Record Not Found (`{case_id}`)
@@ -223,14 +314,81 @@ Deterministic SQL audit queries were run across bank statements, Razorpay UPI tr
 2. **Re-Audit Next Cycle**: Re-run query after the next NEFT / UPI settlement batch clears.
 """
 
+    if decision == "AMOUNT_MISMATCH":
+        return f"""### Executive Audit Memorandum: Amount Variance Mismatch (`{case_id}`)
+
+#### 1. Discrepancy & Variance Analysis
+Investigation executed for counterparty **{entity}** (`{ref_id}`) [CIT-1].
+- **Audit Finding**: {summary_text}
+- **Disputed Variance Ring-Fenced**: **₹{amt_held:,.2f}**
+
+#### 2. Cash-Flow & Debt Service Impact
+- **Current Operating Bank Balance**: {runway.get('current_bank_balance', '₹3,12,450.00')} [CIT-2]
+- **Upcoming Critical 7-Day Loan EMI**: {runway.get('upcoming_30d_critical_emi', '₹1,10,000.00')} [CIT-2]
+- **Unmitigated Full Payout**: Leaves free cash of **{runway.get('post_emi_free_cash_without_praman', '₹18,450.00')}** (Coverage: **{runway.get('coverage_without_praman', '1.17x')}**).
+- **With Praman Variance Hold**: Preserves **{runway.get('post_emi_free_cash_with_praman', '₹46,517.80')}** free cash (Coverage preserved at **{runway.get('coverage_with_praman', '1.42x')}**).
+
+#### 3. Prescribed Actions
+1. **Hold Disputed Variance**: Withhold ₹{amt_held:,.2f} pending revised invoice or debit/credit note adjustment.
+2. **Require Counterparty Clarification**: Issue reconciliation notice to {entity} highlighting ledger variance.
+"""
+
+    if decision == "DIRECTION_MISMATCH":
+        return f"""### Executive Audit Memorandum: Cash-Flow Direction Inversion (`{case_id}`)
+
+#### 1. Discrepancy & Direction Analysis
+Investigation executed for transaction reference **{ref_id}** [CIT-1].
+- **Audit Finding**: {summary_text}
+- **Hold Amount Enforced**: **₹{amt_held:,.2f}**
+
+#### 2. Cash-Flow & Working Capital Assessment
+The reported transaction claimed an inbound credit, but bank records prove an outgoing debit/withdrawal. Approving a release against this claim poses immediate risk of double disbursement.
+
+#### 3. Prescribed Actions
+1. **Freeze Transaction**: Block payout of ₹{amt_held:,.2f} immediately.
+2. **Request Official Bank Advice**: Demand verified bank credit confirmation showing beneficiary account credit.
+"""
+
+    if decision == "GATEWAY_STATUS_BLOCKED":
+        return f"""### Executive Audit Memorandum: UPI Payment Gateway Blocked (`{case_id}`)
+
+#### 1. Gateway Status Verification
+Gateway query executed for reference **{ref_id}** [CIT-1].
+- **Gateway Finding**: {summary_text}
+- **Disputed Payout Held**: **₹{amt_held:,.2f}**
+
+#### 2. Liquidity & Clearing Guidance
+Funds remain stalled at the banking switch node. Under RBI circular clearing mandates, switch failures are resolved via T+1 bank reversal rather than direct merchant refund.
+
+#### 3. Prescribed Actions
+1. **Reject Chargeback**: Block disbursement of merchant refund.
+2. **Transmit NPCI Clearing Proof**: Provide RRN reference to customer bank for automated credit.
+"""
+
+    if decision == "VENDOR_MISMATCH":
+        return f"""### Executive Audit Memorandum: Vendor Identity Mismatch (`{case_id}`)
+
+#### 1. Identity Verification Flag
+Investigation matched records for reference **{ref_id}** [CIT-1].
+- **Audit Finding**: {summary_text}
+- **Statutory / Legal Hold**: **₹{amt_held:,.2f}**
+
+#### 2. Legal Entity & Payout Risk
+The counterparty claiming payout does not match the legal entity on the registered purchase order or invoice within acceptable Indic phonetic/string similarity tolerances.
+
+#### 3. Prescribed Actions
+1. **Withhold Disbursement**: Lock ₹{amt_held:,.2f} pending KYC/GSTIN verification.
+2. **Require Entity Documentation**: Request certificate of incorporation, PAN, and vendor master change form.
+"""
+
     if decision == "NO_DISCREPANCY_FOUND":
-        amt = context.get("amount", 0.0)
         return f"""### Executive Audit Memorandum: No Discrepancy Found (`{case_id}`)
 
 #### 1. Reconciliation Findings
 - **Counterparty / Vendor**: `{entity}` [CIT-1]
 - **Reference Identifier**: `{ref_id}`
-- **Transaction Amount**: ₹{amt:,.2f}
+- **Transaction Amount**: ₹{total_amt:,.2f}
+- **Hold Amount Required**: ₹0.00 (Zero hold enforced)
 - **Filing & Settlement Status**: Reconciled across ledger, GSTR-2B tax portal, and bank clearing statements.
 
 #### 2. Verification Checklist
@@ -245,12 +403,27 @@ Deterministic SQL audit queries were run across bank statements, Razorpay UPI tr
   - [ ] Physical goods delivery (GRN) or service acceptance
 
 #### 3. Prescribed Actions
-1. **Release Payment**: Proceed with payout of ₹{amt:,.2f} to `{entity}`.
+1. **Release Payment**: Proceed with payout of ₹{total_amt:,.2f} to `{entity}`.
 2. **Close Ticket**: Mark reconciliation complete in accounting ledger.
 """
 
-    # Discrepancy Hold / Action memo
-    amt_held = context.get("amount_held", 0.0)
+    if decision == "INCONCLUSIVE_MANUAL_REVIEW":
+        return f"""### Executive Audit Memorandum: Inconclusive Match · Manual Review Required (`{case_id}`)
+
+#### 1. Audit Assessment
+Investigation matched ledger records for `{entity}` (Ref: `{ref_id}`) [CIT-1].
+- **Finding**: {summary_text or 'Evidence matched on ledger but fails strict zero-variance automated reconciliation.'}
+- **Default Risk Protocol**: Strict safety gate active. Automated payout withheld.
+
+#### 2. Governance Protocol
+Praman never defaults unverified matches to reconciled. When records exhibit incomplete cross-table proof, controller intervention is required before funds are disbursed.
+
+#### 3. Prescribed Actions
+1. **Escalate to Human Controller**: Route dossier to Senior Accounts Controller.
+2. **Inspect Underlying Supporting Docs**: Verify physical GRN, tax invoice, and vendor authorization letter.
+"""
+
+    # Generic Discrepancy Hold (e.g., HOLD_DISPUTED_PORTION)
     return f"""### Executive Audit Memorandum: Discrepancy Hold Enforced (`{case_id}`)
 
 #### 1. Discrepancy & Root Cause Analysis

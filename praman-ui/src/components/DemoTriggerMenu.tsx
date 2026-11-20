@@ -76,9 +76,9 @@ export const DemoTriggerMenu: React.FC<DemoTriggerMenuProps> = ({
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-2 px-3 py-1 rounded-full border border-blue-600/30 bg-blue-50 text-blue-900 text-xs font-mono shadow-sm">
             <Cpu className="w-3.5 h-3.5 text-blue-700" />
-            <span className="font-semibold text-blue-950">AI Reads &amp; Explains</span>
+            <span className="font-semibold text-blue-950">Offline-Ready</span>
             <span className="text-blue-400">·</span>
-            <span>Deterministic Code Decides</span>
+            <span>Optional LLM Key</span>
           </div>
 
           <div className="flex items-center gap-2.5 px-3.5 py-1 rounded-full border border-emerald-600/30 bg-emerald-50 text-emerald-900 text-xs font-mono shadow-sm">

@@ -1,7 +1,9 @@
 """Praman API Data Models and Schemas."""
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 from datetime import date, datetime
+
+ScenarioType = Literal["GST_ITC_HOLD", "UPI_DOUBLE_DEBIT", "SLA_PRORATA_CREDIT", "CUSTOM_INVESTIGATION"]
 
 
 class HealthResponse(BaseModel):
@@ -15,6 +17,7 @@ class HealthResponse(BaseModel):
 
 class DiscrepancyCase(BaseModel):
     case_id: str
+    scenario_type: ScenarioType = "CUSTOM_INVESTIGATION"
     title: str
     category: str
     severity: str

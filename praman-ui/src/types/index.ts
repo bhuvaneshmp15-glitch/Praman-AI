@@ -36,13 +36,32 @@ export interface CitationItem {
   confidence?: number;
 }
 
+export interface VerificationChecklist {
+  checked: string[];
+  pending_human_signoff: string[];
+}
+
 export interface BriefVerdict {
   status: string;
   headline: string;
-  decision: 'HOLD_DISPUTED_PORTION' | 'NO_DISCREPANCY_FOUND' | 'NOT_FOUND_IN_STATEMENT' | string;
+  decision:
+    | 'HOLD_DISPUTED_PORTION'
+    | 'NO_DISCREPANCY_FOUND'
+    | 'NOT_FOUND_IN_STATEMENT'
+    | 'AMOUNT_MISMATCH'
+    | 'DIRECTION_MISMATCH'
+    | 'GATEWAY_STATUS_BLOCKED'
+    | 'VENDOR_MISMATCH'
+    | 'INCONCLUSIVE_MANUAL_REVIEW'
+    | 'HOLD_GST_PORTION'
+    | 'REJECT_CHARGEBACK_SWITCH_FAIL'
+    | 'APPROVE_NET_SLA_CREDIT'
+    | 'PREVENT_DUPLICATE_PAYOUT'
+    | string;
   markdown_brief: string;
   actions: ActionPlan[];
   citations: CitationItem[];
+  verification_checklist?: VerificationChecklist;
 }
 
 export interface DiscrepancyCase {

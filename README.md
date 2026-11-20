@@ -6,8 +6,9 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![DuckDB](https://img.shields.io/badge/DuckDB-1.1.0-FFF000.svg?style=flat&logo=duckdb&logoColor=black)](https://duckdb.org)
 [![Vite + React](https://img.shields.io/badge/Frontend-React_18_+_Vite-61DAFB.svg?style=flat&logo=react&logoColor=black)](https://vitejs.dev)
-[![Tests](https://img.shields.io/badge/Tests-37%20Passed%20(100%25)-success.svg)](https://pytest.org)
-[![Zero API Keys Required](https://img.shields.io/badge/Keys_Required-ZERO_(Keyless_APIs)-brightgreen.svg)](#-live-keyless-public-apis)
+[![Tests](https://img.shields.io/badge/Tests-Passed%20(100%25)-success.svg)](https://pytest.org)
+[![Offline-Ready](https://img.shields.io/badge/Execution-Offline--Ready%20%C2%B7%20Optional%20LLM%20Key-brightgreen.svg)](#-live-keyless-public-apis)
+[![Live Sandbox](https://img.shields.io/badge/Sandbox-Live%20Unscripted%20Intake-blue.svg)](#-interactive-judge-testing--unscripted-sandbox)
 
 ---
 
@@ -168,11 +169,11 @@ Praman integrates 4 public endpoints (`Auth: None`) with 3.0s timeouts and deter
 | Table Name | Rows | Description & Key Columns | Invariant Verified |
 | :--- | :--- | :--- | :--- |
 | `bank_statement` | 4,000 | `row_id`, `txn_date`, `narration`, `withdrawal`, `deposit`, `running_balance`, `ifsc_code`. | Strictly positive running balance ($₹2.5\text{L} \le \text{bal} \le ₹18.5\text{L}$), mutually exclusive debit/credit, natural final balance $₹3,12,450.00$. |
-| `tally_invoices` | 2,000 | `invoice_id`, `invoice_date`, `vendor_name`, `vendor_gstin`, `taxable_value`, `igst_amount`, `total_amount`, `vendor_ifsc`, `payout_status`. | Three-way match ready with GSTR-2B and bank debits. |
-| `gstr2b_tax` | 2,000 | `gstr2b_id`, `gstin_supplier`, `invoice_num`, `invoice_date`, `itc_eligible_amount`, `filing_status`. | CGST Section 16(2)(aa) statutory reflection baseline. |
-| `razorpay_upi` | 2,000 | `payment_id`, `order_id`, `created_at`, `gross_amount`, `mdr_fee`, `gst_on_fee`, `net_settlement`, `status`, `rrn_utr`, `customer_vpa`. | **Zero MDR mandate** (`mdr_fee = 0.0`, `net_settlement = gross_amount`). Reconciles with HDFC Bank Statement settlements via 12-digit RRN/UTR. |
-| `cashflow_commitments` | 20 | `commitment_id`, `due_date`, `amount`, `commitment_type`, `priority`, `lender_or_payee`. | Prioritized debt service schedules (HDFC Loan EMI ₹1,10,000.00). |
-| `company_policies` | 20 | `policy_id`, `domain`, `title`, `rule_body`, `section_ref`. | Statutory CGST Sec 16(2)(aa)/16(4) policies and liquidity reserve policies. |
+| `razorpay_upi` | 2,500 | `payment_id`, `order_id`, `created_at`, `gross_amount`, `mdr_fee`, `gst_on_fee`, `net_settlement`, `status`, `rrn_utr`, `customer_vpa`. | **Zero MDR mandate** (`mdr_fee = 0.0`, `net_settlement = gross_amount`). Reconciles with HDFC Bank Statement settlements via 12-digit RRN/UTR. |
+| `tally_invoices` | 1,800 | `invoice_id`, `invoice_date`, `vendor_name`, `vendor_gstin`, `taxable_value`, `igst_amount`, `total_amount`, `vendor_ifsc`, `payout_status`. | Three-way match ready with GSTR-2B and bank debits. |
+| `gstr2b_tax` | 1,700 | `gstr2b_id`, `gstin_supplier`, `invoice_num`, `invoice_date`, `itc_eligible_amount`, `filing_status`. | CGST Section 16(2)(aa) statutory reflection baseline. |
+| `cashflow_commitments` | 25 | `commitment_id`, `due_date`, `amount`, `commitment_type`, `priority`, `lender_or_payee`. | Prioritized debt service schedules (HDFC Loan EMI ₹1,10,000.00). |
+| `company_policies` | 15 | `policy_id`, `domain`, `title`, `rule_body`, `section_ref`. | Statutory CGST Sec 16(2)(aa)/16(4) policies and liquidity reserve policies. |
 
 ---
 
@@ -206,18 +207,18 @@ Judges and evaluators can execute completely unscripted investigations on unseen
 ### 1. Interactive Sandbox in UI:
 Located at the top of the workspace with 3 instant 1-click test buttons:
 - **Sample 1: Real Ledger UTR (`432910485799`)**: Reconciles clean settlement with Ganpati Trading Co $\rightarrow$ yields `NO_DISCREPANCY_FOUND` and displays the **Verification Checklist**.
-- **Sample 2: Unseen Messy SMS (`Dear SBI User, your A/c XX4892 debited by Rs 18,400...`)**: AI Job A tokenizes/redacts PII, extracts parameters, and audits ledger $\rightarrow$ enforces safe hold.
+- **Sample 2: Amount Mismatch SMS (`Dear SBI User, your A/c XX4892 debited by Rs 18,400...`)**: Detects variance against ledger invoice ₹1,84,000.00 $\rightarrow$ yields `AMOUNT_MISMATCH` with exact ₹1,65,600.00 variance hold.
 - **Sample 3: Unrecorded UTR (`999999999999`)**: Missing from bank statement $\rightarrow$ yields `NOT_FOUND_IN_STATEMENT` with safe guidance protocol.
 
-### 2. Evidence-Grounded Branching:
-- **0 rows matched (e.g. fake UTR `999999999999`):** Verdict `NOT_FOUND_IN_STATEMENT`:
-  > *"Not found in the statement as of 2026-11-18. Ask the counterparty for the 12-digit UTR / bank advice proof and recheck after the next NEFT/UPI settlement cycle."*
-  ₹0.00 at risk, zero fabricated citations, zero speculative claims.
-- **Matched & Reconciled (clean filed invoice like `INV-2026-0037`):** Verdict `NO_DISCREPANCY_FOUND`:
-  Renders the **Reconciliation Verification Checklist**:
-  - *Checked & Matched (Automated):* Bank statement settlement verified, UPI RRN confirmed, Tally invoice matches tax records, GSTR-2B confirmed `FILED`.
-  - *Requires Human Sign-off:* Prior FY duplicate checks, beneficiary account ownership verification, physical goods (GRN) acceptance.
-- **Matched with Discrepancy (unfiled tax or failed switch):** Verdict `HOLD_DISPUTED_PORTION` with exact mathematical delta hold.
+### 2. Evidence-Grounded Branching & Verdict Hierarchy:
+- **0 rows matched (e.g. fake UTR `999999999999`):** Verdict `NOT_FOUND_IN_STATEMENT` with zero fabricated citations.
+- **Amount Mismatch (`abs(claimed - ledger) > 0.01`):** Verdict `AMOUNT_MISMATCH` with exact variance hold.
+- **Cash-flow Direction Mismatch (`INBOUND` claim vs ledger debit):** Verdict `DIRECTION_MISMATCH`.
+- **Gateway Status Blocked (`status in ('disputed', 'failed_at_switch')`):** Verdict `GATEWAY_STATUS_BLOCKED`.
+- **Vendor Identity Mismatch (`jw_sim < 0.90`):** Verdict `VENDOR_MISMATCH`.
+- **GSTR-2B Tax Unfiled:** Verdict `HOLD_DISPUTED_PORTION` under CGST Section 16(2)(aa).
+- **Matched & Reconciled (clean filed invoice like `INV-2026-0037`):** Verdict `NO_DISCREPANCY_FOUND` with dynamic verification checklist.
+- **Fallback Default (Never defaults to reconciled):** Verdict `INCONCLUSIVE_MANUAL_REVIEW`.
 
 ### 3. Live Endpoints:
 - `POST /api/cases/custom`: Accepts `{"query": str, "raw_narration": str | None}` for unscripted investigations.

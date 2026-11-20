@@ -18,12 +18,12 @@ from praman_api.adapters.public_apis import (
 IFSC_FALLBACK_REGISTRY = IFSC_FALLBACK_CACHE
 
 
-def duckdb_sql(query: str, purpose: str = "") -> Dict[str, Any]:
+def duckdb_sql(query: str, purpose: str = "", params: Optional[List[Any]] = None) -> Dict[str, Any]:
     """Runs a wide multi-table SQL query across the DuckDB semantic plane.
     
     Can raise SqlSemanticError if financial guardrails are breached.
     """
-    result = db_plane.execute_query(query)
+    result = db_plane.execute_query(query, params=params)
     result["purpose"] = purpose
     return result
 
@@ -71,10 +71,11 @@ def conclude_brief(
     headline: str,
     decision: str,
     markdown_brief: str,
-    actions: List[Dict[str, Any]]
+    actions: List[Dict[str, Any]],
+    verification_checklist: Optional[Dict[str, List[str]]] = None
 ) -> Dict[str, Any]:
     """Finalizes the investigation case and outputs structured decision payload."""
-    return {
+    res = {
         "status": "CONCLUDED",
         "headline": headline,
         "decision": decision,
@@ -82,3 +83,6 @@ def conclude_brief(
         "actions": actions,
         "citations": citation_service.all()
     }
+    if verification_checklist is not None:
+        res["verification_checklist"] = verification_checklist
+    return res

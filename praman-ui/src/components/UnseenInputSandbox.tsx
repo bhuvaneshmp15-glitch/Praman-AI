@@ -22,8 +22,8 @@ export const UnseenInputSandbox: React.FC<UnseenInputSandboxProps> = ({
       icon: CheckCircle2,
     },
     {
-      label: 'Sample 2: Unseen Messy SMS',
-      subtitle: '₹18,400 · Sri Balaji Ent UPI Debit',
+      label: 'Sample 2: Amount Mismatch SMS',
+      subtitle: 'Claimed ₹18,400 vs Ledger ₹1,84,000 · Sri Balaji Ent',
       text: 'Investigate payment for Sri Balaji Ent Rs 18,400',
       narration: 'Dear SBI User, your A/c XX4892 debited by Rs 18,400.00 on 18-Nov-26 transfer to SRI BALAJI ENT UPI Ref 632819045112',
       color: 'border-amber-700/30 bg-amber-50 hover:bg-amber-100 text-amber-950',
@@ -59,7 +59,7 @@ export const UnseenInputSandbox: React.FC<UnseenInputSandboxProps> = ({
             Test Unseen Input: Bank SMS / Narration / UTR Sandbox
           </h3>
           <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 font-semibold">
-            Zero Hardcoded Scenarios · Pure Deterministic + AI Pipeline
+            Live Unscripted Intake Sandbox
           </span>
         </div>
         <span className="text-xs text-paper-muted font-sans">

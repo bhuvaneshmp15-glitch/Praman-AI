@@ -4,8 +4,9 @@ from praman_api.services.cashflow_math import compute_runway_impact, format_inr
 from praman_api.services.citations import CitationTracker
 from praman_api.agent.tools import verify_ifsc_live, calculate_emi_runway
 from praman_api.agent.loop import run_investigation_sync
-from praman_api.agent.llm_planner import redact_pii, parse_investigation_intent
-from praman_api.services.llm_service import ai_extract_intake, ai_synthesize_memo
+from praman_api.agent.llm_planner import redact_pii, parse_investigation_intent, _build_deterministic_sql
+from praman_api.services.llm_service import ai_extract_intake, ai_synthesize_memo, verify_memo_numbers
+from praman_api.engine.duckdb_plane import db_plane
 
 
 def test_ai_extract_intake():
@@ -245,3 +246,120 @@ def test_investigation_stream_custom_case_verified_safe_to_pay():
     assert "[CIT-1]" in vdata["markdown_brief"]
     assert "Verification Checklist" in vdata["markdown_brief"]
     assert "₹0.00" in vdata["markdown_brief"]
+
+
+def test_amount_regex_precision():
+    """Verify that amount parser extracts exact numbers without digit truncation or invoice confusion."""
+    # Test "Rs 88452" -> 88452.0
+    p1 = parse_investigation_intent("Transfer to Sri Balaji Rs 88452 on 18-Nov")
+    assert p1["amount"] == 88452.0
+
+    # Test "4500" -> 4500.0
+    p2 = parse_investigation_intent("Dispute charge 4500 for vendor services")
+    assert p2["amount"] == 4500.0
+
+    # Test invoice ID "INV-2026-0006" is not extracted as amount
+    p3 = parse_investigation_intent("Verify invoice INV-2026-0006")
+    assert p3["invoice_id"] == "INV-2026-0006"
+    assert p3["amount"] is None
+
+
+def test_parameterized_sql_with_apostrophes():
+    """Verify that DuckDB parameters handle single quotes safely without syntax errors or injection."""
+    vendor_with_quote = "O'Brien Traders"
+    sql, params = _build_deterministic_sql("Verify vendor record", norm_vendor=vendor_with_quote)
+    assert "$1" in sql
+    assert params == [vendor_with_quote]
+
+    # Execute on DuckDB plane
+    res = db_plane.execute_query(sql, params=params)
+    assert "columns" in res
+    assert isinstance(res["rows"], list)
+
+
+def test_evidence_comparison_amount_mismatch():
+    """Verify AMOUNT_MISMATCH verdict when claimed amount differs from ledger invoice amount."""
+    case_data = {
+        "case_id": "CASE-CUSTOM-AMT-DIFF",
+        "scenario_type": "CUSTOM_INVESTIGATION",
+        "description": "Investigate payment for Sri Balaji Ent Rs 18,400",
+        "scenario_metadata": {
+            "custom_query": "Investigate invoice INV-2026-104 for Sri Balaji Ent claimed Rs 18,400",
+            "raw_narration": "Dear SBI User, your A/c XX4892 debited by Rs 18,400.00 on 18-Nov-26"
+        }
+    }
+    events = list(run_investigation_sync("CASE-CUSTOM-AMT-DIFF", case_data=case_data))
+    verdicts = [e for e in events if e.get("type") == "verdict"]
+    assert len(verdicts) == 1
+    vdata = verdicts[0]["data"]
+    assert vdata["decision"] == "AMOUNT_MISMATCH"
+    assert "Amount Mismatch" in vdata["headline"]
+    # Check that variance delta (184000 - 18400 = 165600) is held
+    actions = vdata["actions"]
+    assert any(act.get("variance_amount") == 165600.00 for act in actions)
+
+
+def test_evidence_comparison_direction_mismatch():
+    """Verify DIRECTION_MISMATCH when claim says inbound credit but bank statement is an outbound debit."""
+    case_data = {
+        "case_id": "CASE-CUSTOM-DIR-DIFF",
+        "scenario_type": "CUSTOM_INVESTIGATION",
+        "description": "Customer customer paid us deposit received for INV-2026-104",
+        "scenario_metadata": {
+            "custom_query": "Customer customer paid us deposit received for INV-2026-104",
+            "raw_narration": "Customer claims customer paid us deposit received for INV-2026-104"
+        }
+    }
+    events = list(run_investigation_sync("CASE-CUSTOM-DIR-DIFF", case_data=case_data))
+    verdicts = [e for e in events if e.get("type") == "verdict"]
+    assert len(verdicts) == 1
+    vdata = verdicts[0]["data"]
+    assert vdata["decision"] == "DIRECTION_MISMATCH"
+
+
+def test_evidence_comparison_gateway_blocked():
+    """Verify GATEWAY_STATUS_BLOCKED when UPI transaction is failed_at_switch."""
+    case_data = {
+        "case_id": "CASE-CUSTOM-UPI-FAIL",
+        "scenario_type": "CUSTOM_INVESTIGATION",
+        "description": "Check UPI transaction 432910485711",
+        "scenario_metadata": {
+            "custom_query": "Check UPI RRN 432910485711",
+            "raw_narration": "UPI RRN 432910485711"
+        }
+    }
+    events = list(run_investigation_sync("CASE-CUSTOM-UPI-FAIL", case_data=case_data))
+    verdicts = [e for e in events if e.get("type") == "verdict"]
+    assert len(verdicts) == 1
+    vdata = verdicts[0]["data"]
+    assert vdata["decision"] == "GATEWAY_STATUS_BLOCKED"
+
+
+def test_scenario_type_routing_no_substring():
+    """Verify that case_id containing '104' or 'UPI' routes by scenario_type, not substring."""
+    case_data = {
+        "case_id": "CASE-104-CUSTOM-TEST",
+        "scenario_type": "CUSTOM_INVESTIGATION",
+        "description": "Check fake reference 999999999999",
+        "scenario_metadata": {
+            "custom_query": "Check fake reference 999999999999"
+        }
+    }
+    events = list(run_investigation_sync("CASE-104-CUSTOM-TEST", case_data=case_data))
+    verdicts = [e for e in events if e.get("type") == "verdict"]
+    assert len(verdicts) == 1
+    # Must NOT route to CASE-GST-104; must route to CUSTOM_INVESTIGATION
+    assert verdicts[0]["data"]["decision"] == "NOT_FOUND_IN_STATEMENT"
+
+
+def test_verify_memo_numbers_guardrail():
+    """Verify that verify_memo_numbers strictly rejects hallucinated rupee numbers."""
+    allowed = [184000.00, 28067.80, 110000.00]
+
+    # Valid memo with allowed numbers
+    valid_memo = "The invoice is for ₹1,84,000.00 with statutory IGST of ₹28,067.80. EMI buffer is ₹1,10,000.00."
+    assert verify_memo_numbers(valid_memo, allowed) is True
+
+    # Hallucinated memo with invented number
+    fake_memo = "The approved payout is ₹99,999.00 with an unverified credit of ₹50,000.00."
+    assert verify_memo_numbers(fake_memo, allowed) is False

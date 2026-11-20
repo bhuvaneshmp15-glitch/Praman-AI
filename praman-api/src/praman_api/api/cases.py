@@ -13,6 +13,7 @@ router = APIRouter(prefix="/cases", tags=["cases"])
 INITIAL_CASES: Dict[str, Dict[str, Any]] = {
     "CASE-GST-104": {
         "case_id": "CASE-GST-104",
+        "scenario_type": "GST_ITC_HOLD",
         "title": "Sri Balaji Enterprises GSTIN ITC Leakage & Debt Service Buffer",
         "category": "GST_ITC_LEAKAGE",
         "severity": "CRITICAL",
@@ -33,6 +34,7 @@ INITIAL_CASES: Dict[str, Dict[str, Any]] = {
     },
     "CASE-UPI-209": {
         "case_id": "CASE-UPI-209",
+        "scenario_type": "UPI_DOUBLE_DEBIT",
         "title": "Customer UPI Double-Debit Chargeback: Switch Failure vs Captured Credit",
         "category": "UPI_DOUBLE_DEBIT",
         "severity": "HIGH",
@@ -51,6 +53,7 @@ INITIAL_CASES: Dict[str, Dict[str, Any]] = {
     },
     "CASE-SLA-302": {
         "case_id": "CASE-SLA-302",
+        "scenario_type": "SLA_PRORATA_CREDIT",
         "title": "CloudSphere Infrastructure B2B SLA Downtime Dispute",
         "category": "SLA_DOWNTIME_PENALTY",
         "severity": "HIGH",
@@ -71,6 +74,7 @@ INITIAL_CASES: Dict[str, Dict[str, Any]] = {
     },
     "CASE-DUP-404": {
         "case_id": "CASE-DUP-404",
+        "scenario_type": "CUSTOM_INVESTIGATION",
         "title": "Apex Logistics Split-Payment Duplicate Payout Risk",
         "category": "DUPLICATE_DISBURSEMENT",
         "severity": "CRITICAL",
@@ -130,6 +134,7 @@ def trigger_case(scenario_id: str):
         # Custom case fallback
         target_case = {
             "case_id": key,
+            "scenario_type": "CUSTOM_INVESTIGATION",
             "title": f"Custom Discrepancy Investigation: {key}",
             "category": "CUSTOM_QUERY",
             "severity": "HIGH",
@@ -137,7 +142,7 @@ def trigger_case(scenario_id: str):
             "amount_at_risk": 50000.00,
             "invoice_or_ref_id": key,
             "description": f"Autonomous investigation triggered for custom reference {key}.",
-            "scenario_metadata": {"vendor_ifsc": "HDFC0000240"},
+            "scenario_metadata": {"vendor_ifsc": "HDFC0000240", "scenario_type": "CUSTOM_INVESTIGATION"},
             "citations": [],
             "actions": []
         }
@@ -157,6 +162,7 @@ def create_custom_case(payload: CustomCaseRequest):
     case_uid = f"CASE-CUSTOM-{uuid.uuid4().hex[:6].upper()}"
     target_case = {
         "case_id": case_uid,
+        "scenario_type": "CUSTOM_INVESTIGATION",
         "title": f"Custom Investigation: {payload.query[:60]}",
         "category": "CUSTOM_QUERY",
         "severity": "HIGH",
@@ -167,6 +173,7 @@ def create_custom_case(payload: CustomCaseRequest):
         "scenario_metadata": {
             "custom_query": payload.query,
             "raw_narration": payload.raw_narration,
+            "scenario_type": "CUSTOM_INVESTIGATION",
             "vendor_ifsc": "HDFC0000240"
         },
         "citations": [],

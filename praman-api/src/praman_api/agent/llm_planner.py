@@ -7,7 +7,7 @@ Hybrid architecture:
 import os
 import re
 import time
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple, List
 import httpx
 
 from praman_api.engine.udfs import extract_utr, norm_indic_vendor, jw_sim, validate_gstin_checksum
@@ -32,23 +32,26 @@ Registered DuckDB UDFs:
 
 Strict Guardrails:
 - NEVER run SUM(running_balance) on bank_statement. Use CTE with ORDER BY txn_date DESC, row_id DESC LIMIT 1.
-- Use jw_sim >= 0.90 for fuzzy matching and qualify with ROW_NUMBER() to eliminate phonetic decoys.
+- Use jw_sim >= 0.88 for fuzzy matching and qualify with ROW_NUMBER() or LIMIT to eliminate Cartesian fanout.
 - Return ONLY the raw SQL query inside a ```sql ... ``` code block.
 """
 
 
-def redact_pii(text: str) -> str:
-    """Masks Indian financial PII (UTRs, VPAs, account numbers, phone numbers) before external dispatch."""
+def redact_pii(text: str, mask_utr: bool = True) -> str:
+    """Masks Indian financial PII (VPAs, account numbers, phone numbers, and optionally UTRs) before external dispatch."""
     if not text:
         return ""
-    # Mask 12-digit UTR / RRN numbers
-    redacted = re.sub(r"\b\d{12}\b", "<UTR_TOKEN>", text)
+    redacted = text
+    # Mask 12-digit UTR / RRN numbers if requested (e.g. for SQL generation where token substitution is handled)
+    if mask_utr:
+        redacted = re.sub(r"\b\d{12}\b", "<UTR_TOKEN>", redacted)
     # Mask VPAs (e.g., user@okhdfcbank, someone@upi)
     redacted = re.sub(r"[a-zA-Z0-9.\-_]{2,}@[a-zA-Z]{2,}", "<VPA_TOKEN>", redacted)
     # Mask 10-digit Indian mobile numbers (starts with 6,7,8,9)
     redacted = re.sub(r"\b[6-9]\d{9}\b", "<PHONE_TOKEN>", redacted)
-    # Mask bank account numbers (11 to 18 digits)
-    redacted = re.sub(r"\b\d{11,18}\b", "<ACCOUNT_TOKEN>", redacted)
+    # Mask bank account numbers (13 to 18 digits or marked with A/c)
+    redacted = re.sub(r"\b\d{13,18}\b", "<ACCOUNT_TOKEN>", redacted)
+    redacted = re.sub(r"(?i)\bA/c\s*(?:no\.?)?\s*[:\-]?\s*(\d{4,})", "A/c <ACCOUNT_TOKEN>", redacted)
     return redacted
 
 
@@ -61,22 +64,34 @@ def parse_investigation_intent(query: str, raw_narration: Optional[str] = None) 
     utr = utr_standalone.group(1) if utr_standalone else (extract_utr(raw_narration or "") if raw_narration else extract_utr(query))
     
     # 2. Extract Invoice ID (INV-YYYY-XXXX or INV-XXXX)
-    inv_match = re.search(r"INV-\d{4}-\d+|INV-\d+", combined, re.IGNORECASE)
+    inv_match = re.search(r"\bINV-\d{4}-\d+\b|\bINV-\d+\b", combined, re.IGNORECASE)
     invoice_id = inv_match.group(0).upper() if inv_match else None
     
     # 3. Extract 15-char GSTIN
     gstin_match = re.search(r"[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}", combined)
     gstin = gstin_match.group(0) if gstin_match else None
     
-    # 4. Extract Amount
-    amt_match = re.search(
-        r"(?:₹|INR|RS\.?|AMOUNT\s*:?\s*)?\s*([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]{1,2})?|\b[0-9]{4,8}(?:\.[0-9]{1,2})?\b)",
-        combined,
+    # 4. Extract Amount - strip invoice IDs, 12-digit UTRs, and payment IDs first
+    clean_for_amt = re.sub(r"\bINV-\d{4}-\d+\b|\bINV-\d+\b", " ", combined, flags=re.IGNORECASE)
+    clean_for_amt = re.sub(r"\b\d{12}\b", " ", clean_for_amt)
+    clean_for_amt = re.sub(r"\bpay_[a-zA-Z0-9_]+\b", " ", clean_for_amt)
+
+    # First check for explicit currency prefix (₹, Rs., INR)
+    amt_prefix_match = re.search(
+        r"(?:₹|INR|RS\.?|AMOUNT\s*:?\s*)\s*([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]{1,2})?|\d+(?:\.\d{1,2})?)\b",
+        clean_for_amt,
         re.IGNORECASE
     )
+    # Next check for standalone boundary matching not adjacent to hyphens/slashes
+    amt_standalone_match = re.search(
+        r"(?<![\d\-/])\b(\d{1,3}(?:,\d{2,3})+(?:\.\d{1,2})?|\d{3,8}(?:\.\d{1,2})?)\b(?![\d\-/])",
+        clean_for_amt
+    )
+
     amount = None
-    if amt_match:
-        val_str = amt_match.group(1).replace(",", "")
+    target_match = amt_prefix_match or amt_standalone_match
+    if target_match:
+        val_str = target_match.group(1).replace(",", "")
         try:
             val = float(val_str)
             if val > 0:
@@ -84,10 +99,18 @@ def parse_investigation_intent(query: str, raw_narration: Optional[str] = None) 
         except ValueError:
             amount = None
 
-    # 5. Extract Vendor Query
+    # 5. Extract Direction (INBOUND vs OUTBOUND)
+    combined_lower = combined.lower()
+    direction = None
+    if any(term in combined_lower for term in ["customer paid", "credit received", "credited", "inbound", "deposit received"]):
+        direction = "INBOUND"
+    elif any(term in combined_lower for term in ["debited", "paid to", "debit", "outbound", "payout to", "transfer to"]):
+        direction = "OUTBOUND"
+
+    # 6. Extract Vendor Query
     vendor_query = norm_indic_vendor(raw_narration or query)
 
-    # 6. Intent classification
+    # 7. Intent classification
     combined_upper = combined.upper()
     if invoice_id:
         intent = "INVOICE_DISCREPANCY"
@@ -108,7 +131,8 @@ def parse_investigation_intent(query: str, raw_narration: Optional[str] = None) 
         "invoice_id": invoice_id,
         "gstin": gstin,
         "vendor_query": vendor_query,
-        "amount": amount
+        "amount": amount,
+        "direction": direction
     }
 
 
@@ -193,6 +217,7 @@ def plan_sql_with_llm(
                             sql = sql.replace("<UTR_TOKEN>", extracted_utr)
                         return {
                             "sql": sql,
+                            "params": [],
                             "purpose": "Autonomous LLM-planned SQL investigation query (PII-safe)",
                             "planner_source": "keyed_llm",
                             "latency_ms": round((time.time() - start_time) * 1000, 2),
@@ -204,9 +229,10 @@ def plan_sql_with_llm(
             pass
 
     # Local Deterministic SQL Template Engine (Zero API Key, Zero PII Leaks, Instant Response)
-    deterministic_sql = _build_deterministic_sql(query, raw_narration, parsed)
+    deterministic_sql, params = _build_deterministic_sql(query, raw_narration, parsed)
     return {
         "sql": deterministic_sql,
+        "params": params,
         "purpose": "Deterministic SQL Guardrail Plan (Local PII-Safe)",
         "planner_source": "local_deterministic_guardrail",
         "latency_ms": round((time.time() - start_time) * 1000, 2),
@@ -222,28 +248,28 @@ def _build_deterministic_sql(
     parsed: Optional[Dict[str, Any]] = None,
     extracted_utr: Optional[str] = None,
     norm_vendor: Optional[str] = None
-) -> str:
-    """Builds a deterministic, defensive DuckDB SQL query matching user query semantics."""
+) -> Tuple[str, List[Any]]:
+    """Builds a deterministic, defensive DuckDB SQL query with $1 parameter binding."""
     if parsed is None:
         parsed = parse_investigation_intent(query, raw_narration)
     
     inv_id = parsed.get("invoice_id")
-    utr = parsed.get("utr") or extracted_utr
+    utr = extracted_utr or parsed.get("utr")
     gstin = parsed.get("gstin")
-    vendor = parsed.get("vendor_query") or norm_vendor
+    vendor = norm_vendor or parsed.get("vendor_query")
 
     # Case A: Invoice specific check (e.g., INV-2026-104 or INV-2026-0037)
     if inv_id:
-        return f"""
+        sql = """
         WITH target_inv AS (
             SELECT invoice_id, invoice_date, vendor_name, vendor_gstin, taxable_value, igst_amount, total_amount, vendor_ifsc, payout_status
             FROM tally_invoices
-            WHERE invoice_id = '{inv_id}'
+            WHERE invoice_id = $1
         ),
         tax_info AS (
             SELECT gstr2b_id, gstin_supplier, invoice_num, itc_eligible_amount, filing_status
             FROM gstr2b_tax
-            WHERE invoice_num = '{inv_id}'
+            WHERE invoice_num = $1
         ),
         bank_matches AS (
             SELECT b.row_id, b.txn_date, b.narration, b.withdrawal, b.deposit,
@@ -251,30 +277,32 @@ def _build_deterministic_sql(
                    jw_sim(b.narration, v.vendor_name) AS sim_score
             FROM bank_statement b
             CROSS JOIN target_inv v
-            WHERE jw_sim(b.narration, v.vendor_name) >= 0.92
+            WHERE b.ifsc_code = v.vendor_ifsc
+              AND jw_sim(b.narration, v.vendor_name) >= 0.92
             QUALIFY ROW_NUMBER() OVER (PARTITION BY b.ifsc_code ORDER BY sim_score DESC) = 1
         )
         SELECT v.*, 
                COALESCE(t.itc_eligible_amount, 0.0) AS gstr2b_itc,
                COALESCE(t.filing_status, 'NOT_FILED') AS gstr2b_filing_status,
-               b.row_id AS bank_row, b.narration AS bank_narration, b.withdrawal AS bank_withdrawal
+               b.row_id AS bank_row, b.narration AS bank_narration, b.withdrawal AS bank_withdrawal, b.deposit AS bank_deposit
         FROM target_inv v
         LEFT JOIN tax_info t ON v.invoice_id = t.invoice_num
         LEFT JOIN bank_matches b ON 1=1;
         """.strip()
+        return sql, [inv_id]
 
     # Case B: UTR / UPI specific query (e.g., 432910485711 or fake 999999999999)
     if utr:
-        return f"""
+        sql = """
         WITH upi_match AS (
             SELECT payment_id, order_id, created_at, gross_amount, net_settlement, status, rrn_utr, customer_vpa
             FROM razorpay_upi
-            WHERE rrn_utr = '{utr}'
+            WHERE rrn_utr = $1
         ),
         bank_match AS (
             SELECT row_id, txn_date, narration, withdrawal, deposit, ifsc_code
             FROM bank_statement
-            WHERE extract_utr(narration) = '{utr}'
+            WHERE extract_utr(narration) = $1
         )
         SELECT u.payment_id, u.order_id, u.created_at, u.gross_amount, u.net_settlement, u.status, u.rrn_utr, u.customer_vpa,
                b.row_id AS bank_row, b.txn_date AS bank_date, b.narration AS bank_narration, b.deposit AS bank_deposit
@@ -282,26 +310,27 @@ def _build_deterministic_sql(
         FULL OUTER JOIN bank_match b ON 1=1
         WHERE u.payment_id IS NOT NULL OR b.row_id IS NOT NULL;
         """.strip()
+        return sql, [utr]
 
     # Case C: GSTIN query
     if gstin:
-        return f"""
+        sql = """
         SELECT t.invoice_id, t.vendor_name, t.vendor_gstin, t.taxable_value, t.igst_amount, t.total_amount, t.payout_status,
                g.gstr2b_id, g.itc_eligible_amount, g.filing_status
         FROM tally_invoices t
         LEFT JOIN gstr2b_tax g ON t.vendor_gstin = g.gstin_supplier AND t.invoice_id = g.invoice_num
-        WHERE t.vendor_gstin = '{gstin}';
+        WHERE t.vendor_gstin = $1;
         """.strip()
+        return sql, [gstin]
 
     # Case D: General Vendor query with fuzzy matching and tax join
     if vendor and len(vendor) >= 3:
-        clean_vendor = vendor[:20].strip()
-        return f"""
+        sql = """
         WITH vendor_candidates AS (
             SELECT invoice_id, invoice_date, vendor_name, vendor_gstin, taxable_value, igst_amount, total_amount, payout_status,
-                   jw_sim(norm_indic_vendor(vendor_name), '{clean_vendor}') AS sim_score
+                   jw_sim(norm_indic_vendor(vendor_name), norm_indic_vendor($1)) AS sim_score
             FROM tally_invoices
-            WHERE jw_sim(norm_indic_vendor(vendor_name), '{clean_vendor}') >= 0.85
+            WHERE jw_sim(norm_indic_vendor(vendor_name), norm_indic_vendor($1)) >= 0.88
         )
         SELECT v.invoice_id, v.invoice_date, v.vendor_name, v.vendor_gstin, v.taxable_value, v.igst_amount, v.total_amount, v.payout_status,
                COALESCE(g.itc_eligible_amount, 0.0) AS gstr2b_itc,
@@ -309,11 +338,12 @@ def _build_deterministic_sql(
         FROM vendor_candidates v
         LEFT JOIN gstr2b_tax g ON v.invoice_id = g.invoice_num
         ORDER BY v.sim_score DESC, v.invoice_date DESC
-        LIMIT 10;
+        LIMIT 5;
         """.strip()
+        return sql, [vendor]
 
     # Fallback Case: Query top pending invoices with tax filing status
-    return """
+    sql = """
     SELECT t.invoice_id, t.invoice_date, t.vendor_name, t.vendor_gstin, t.taxable_value, t.igst_amount, t.total_amount, t.payout_status,
            COALESCE(g.itc_eligible_amount, 0.0) AS gstr2b_itc,
            COALESCE(g.filing_status, 'NOT_FILED') AS gstr2b_filing_status
@@ -322,3 +352,4 @@ def _build_deterministic_sql(
     ORDER BY t.invoice_date DESC
     LIMIT 5;
     """.strip()
+    return sql, []

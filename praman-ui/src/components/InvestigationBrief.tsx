@@ -125,6 +125,31 @@ export const InvestigationBrief: React.FC<InvestigationBriefProps> = ({
               <ShieldCheck className="w-4 h-4 text-emerald-600" />
               NO DISCREPANCY FOUND
             </span>
+          ) : decision === 'AMOUNT_MISMATCH' ? (
+            <span className="px-3 py-1.5 rounded-full bg-rose-100 text-rose-900 border border-rose-300 font-sans text-xs font-bold flex items-center gap-1.5 shadow-xs">
+              <AlertOctagon className="w-4 h-4 text-rose-600" />
+              AMOUNT MISMATCH (DELTA HELD)
+            </span>
+          ) : decision === 'DIRECTION_MISMATCH' ? (
+            <span className="px-3 py-1.5 rounded-full bg-purple-100 text-purple-900 border border-purple-300 font-sans text-xs font-bold flex items-center gap-1.5 shadow-xs">
+              <AlertTriangle className="w-4 h-4 text-purple-600" />
+              DIRECTION MISMATCH
+            </span>
+          ) : decision === 'GATEWAY_STATUS_BLOCKED' ? (
+            <span className="px-3 py-1.5 rounded-full bg-red-100 text-red-900 border border-red-300 font-sans text-xs font-bold flex items-center gap-1.5 shadow-xs">
+              <AlertOctagon className="w-4 h-4 text-red-600" />
+              GATEWAY STATUS BLOCKED
+            </span>
+          ) : decision === 'VENDOR_MISMATCH' ? (
+            <span className="px-3 py-1.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-sans text-xs font-bold flex items-center gap-1.5 shadow-xs">
+              <AlertTriangle className="w-4 h-4 text-amber-600" />
+              VENDOR MISMATCH
+            </span>
+          ) : decision === 'INCONCLUSIVE_MANUAL_REVIEW' ? (
+            <span className="px-3 py-1.5 rounded-full bg-stone-100 text-stone-800 border border-stone-300 font-sans text-xs font-bold flex items-center gap-1.5 shadow-xs">
+              <HelpCircle className="w-4 h-4 text-stone-600" />
+              INCONCLUSIVE (MANUAL REVIEW)
+            </span>
           ) : (
             <span className="px-3 py-1.5 rounded-full bg-rose-100 text-rose-900 border border-rose-300 font-sans text-xs font-bold flex items-center gap-1.5 shadow-xs">
               <AlertOctagon className="w-4 h-4 text-rose-600" />
@@ -149,8 +174,52 @@ export const InvestigationBrief: React.FC<InvestigationBriefProps> = ({
           </div>
         )}
 
-        {/* Verification Checklist Card (Checked vs Not Verified) */}
-        {decision === 'NO_DISCREPANCY_FOUND' && (
+        {/* Verification Checklist Card (Dynamic Evidence-Driven Checklist) */}
+        {brief?.verification_checklist ? (
+          <div className="bg-paper-card border border-paper-border rounded-lg p-5 shadow-paper-sm space-y-3">
+            <div className="flex items-center justify-between border-b border-paper-border/60 pb-2">
+              <div className="flex items-center gap-2">
+                <CheckSquare className="w-4 h-4 text-emerald-700" />
+                <h4 className="font-serif text-sm font-bold text-paper-text">
+                  Reconciliation Verification Checklist
+                </h4>
+              </div>
+              <span className="text-[10px] font-mono text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                Evidence-Grounded Audit
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-sans">
+              <div className="space-y-1.5 bg-emerald-50/60 p-3 rounded border border-emerald-200/80">
+                <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-emerald-900 block">
+                  ✓ Checked &amp; Matched (Deterministic Engine)
+                </span>
+                <ul className="space-y-1 text-emerald-900">
+                  {brief.verification_checklist.checked.map((item, idx) => (
+                    <li key={idx} className="flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="space-y-1.5 bg-amber-50/60 p-3 rounded border border-amber-200/80">
+                <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-amber-900 block">
+                  ! Requires Human Sign-off
+                </span>
+                <ul className="space-y-1 text-amber-900">
+                  {brief.verification_checklist.pending_human_signoff.map((item, idx) => (
+                    <li key={idx} className="flex items-center gap-1.5">
+                      <Square className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        ) : decision === 'NO_DISCREPANCY_FOUND' && (
           <div className="bg-paper-card border border-paper-border rounded-lg p-5 shadow-paper-sm space-y-3">
             <div className="flex items-center justify-between border-b border-paper-border/60 pb-2">
               <div className="flex items-center gap-2">

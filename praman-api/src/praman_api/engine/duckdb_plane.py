@@ -88,7 +88,7 @@ class DuckDBPlane:
         except Exception:
             pass
 
-    def execute_query(self, sql: str) -> Dict[str, Any]:
+    def execute_query(self, sql: str, params: Optional[List[Any]] = None) -> Dict[str, Any]:
         """Runs read-only SQL, measures execution latency in ms, and enforces financial guardrails.
         
         Returns:
@@ -112,11 +112,12 @@ class DuckDBPlane:
             )
 
         # 3. Anti-Bug Guardrail 2 (Cartesian Fanout Check - Static threshold analysis)
-        # Check for jw_sim(...) >= 0.xx or > 0.xx where xx < 0.90
+        has_limit_or_window = bool(re.search(r'\b(LIMIT\s+\d+|QUALIFY\s+ROW_NUMBER\s*\(\))\b', clean_sql, re.IGNORECASE))
         jw_thresh_match = re.search(r'jw_sim\s*\(.*?\)\s*(?:>=|>)\s*(0\.\d+)', clean_sql, re.IGNORECASE)
         if jw_thresh_match:
             thresh_val = float(jw_thresh_match.group(1))
-            if thresh_val < 0.90:
+            # Safe ranked vendor search allows >= 0.88 with explicit LIMIT or window function
+            if thresh_val < 0.90 and not (thresh_val >= 0.88 and has_limit_or_window):
                 raise SqlSemanticError(
                     "CARTESIAN FANOUT DETECTED: Fuzzy join threshold too loose or missing ranking window function. "
                     "Tighten jw_sim >= 0.92 or rank top match per invoice_id."
@@ -133,7 +134,10 @@ class DuckDBPlane:
         conn = self.connect()
         t0 = time.perf_counter()
         try:
-            df = conn.execute(clean_sql).fetchdf()
+            if params is not None:
+                df = conn.execute(clean_sql, params).fetchdf()
+            else:
+                df = conn.execute(clean_sql).fetchdf()
         except Exception as e:
             raise SqlSemanticError(f"SQL execution error: {str(e)}")
         t1 = time.perf_counter()

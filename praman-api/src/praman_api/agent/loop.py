@@ -7,10 +7,12 @@ from typing import AsyncGenerator, Generator, Dict, Any, List, Optional
 
 from praman_api.config import settings
 from praman_api.engine.duckdb_plane import db_plane, SqlSemanticError
+from praman_api.engine.udfs import norm_indic_vendor, jw_sim
 from praman_api.services.citations import citation_service
 from praman_api.services.cashflow_math import compute_runway_impact, format_inr
 from praman_api.agent.llm_planner import plan_sql_with_llm, _build_deterministic_sql, redact_pii
 from praman_api.services.llm_service import ai_extract_intake, ai_synthesize_memo
+from praman_api.api.cases import CASE_STORE
 from praman_api.agent.tools import (
     duckdb_sql,
     record_finding,
@@ -33,10 +35,26 @@ def run_investigation_sync(case_id: str, case_data: Optional[Dict[str, Any]] = N
     case_key = case_id.strip().upper()
     citation_service.clear()
 
+    # Explicit scenario_type routing — ZERO substring matching
+    scenario_type = (case_data or {}).get("scenario_type")
+    if not scenario_type and case_id in CASE_STORE:
+        scenario_type = CASE_STORE[case_id].get("scenario_type")
+    if not scenario_type and case_key in CASE_STORE:
+        scenario_type = CASE_STORE[case_key].get("scenario_type")
+    if not scenario_type:
+        if case_key == "CASE-GST-104":
+            scenario_type = "GST_ITC_HOLD"
+        elif case_key == "CASE-UPI-209":
+            scenario_type = "UPI_DOUBLE_DEBIT"
+        elif case_key == "CASE-SLA-302":
+            scenario_type = "SLA_PRORATA_CREDIT"
+        else:
+            scenario_type = "CUSTOM_INVESTIGATION"
+
     # =========================================================================
-    # CASE 1: CASE-GST-104 (Sri Balaji Enterprises GSTIN & ITC Leakage)
+    # SCENARIO 1: GST_ITC_HOLD (Sri Balaji Enterprises GSTIN & ITC Leakage)
     # =========================================================================
-    if "GST" in case_key or "104" in case_key or "BALAJI" in case_key:
+    if scenario_type == "GST_ITC_HOLD":
         yield {
             "type": "thought",
             "text": "Initiating autonomous multi-table investigation for CASE-GST-104: Vendor 'Sri Balaji Enterprises' (Invoice INV-2026-104). Cross-referencing Tally ERP, GSTR-2B, Bank Statements, Postal Jurisdiction, and Cashflow Commitments..."
@@ -338,9 +356,9 @@ Audit cross-checks across the semantic plane and public verification APIs reveal
         return
 
     # =========================================================================
-    # CASE 2: CASE-UPI-209 (UPI Double-Debit Chargeback Dispute)
+    # SCENARIO 2: UPI_DOUBLE_DEBIT (UPI Double-Debit Chargeback Dispute)
     # =========================================================================
-    elif "UPI" in case_key or "209" in case_key or "CHARGEBACK" in case_key:
+    elif scenario_type == "UPI_DOUBLE_DEBIT":
         yield {
             "type": "thought",
             "text": "Investigating CASE-UPI-209: Customer UPI Double-Debit Chargeback of ₹14,500.00. Querying payment gateway logs, bank statement settlement deposits, and clearing node IFSC..."
@@ -447,9 +465,9 @@ The customer reported a double debit of **₹14,500.00** on 2026-11-14.
         return
 
     # =========================================================================
-    # CASE 3: CASE-SLA-302 (Enterprise SLA Downtime Dispute)
+    # SCENARIO 3: SLA_PRORATA_CREDIT (Enterprise SLA Downtime Dispute)
     # =========================================================================
-    elif "SLA" in case_key or "302" in case_key or "881" in case_key:
+    elif scenario_type == "SLA_PRORATA_CREDIT":
         yield {
             "type": "thought",
             "text": "Investigating CASE-SLA-302: Enterprise Vendor CloudSphere Solutions downtime dispute on invoice INV-2026-881 (₹84,000.00). Cross-checking company policy schedule and live currency benchmarks..."
@@ -532,7 +550,7 @@ Company Policy `POL-SLA-01` (`SEC-4.2`) strictly governs cloud vendor downtime p
     # =========================================================================
     # CASE 4: CASE-DUP-404 (Split Bank Transfers Duplicate Payout Prevention)
     # =========================================================================
-    elif "DUP" in case_key or "404" in case_key or "APEX" in case_key:
+    elif case_key == "CASE-DUP-404":
         yield {
             "type": "thought",
             "text": f"Investigating CASE-DUP-404: Duplicate Payout Protection on invoice INV-2026-404 (₹1,25,000.00). Inspecting split bank statement debits..."
@@ -654,6 +672,7 @@ Approving this payout would have caused an unrecoverable **₹1,25,000.00 duplic
         # 1. Synthesize SQL via LLM Planner / Deterministic Template
         plan_result = plan_sql_with_llm(query=query_text, raw_narration=narration_text)
         planned_sql = plan_result["sql"]
+        planned_params = plan_result.get("params", [])
         planner_src = plan_result["planner_source"]
 
         yield {
@@ -669,7 +688,7 @@ Approving this payout would have caused an unrecoverable **₹1,25,000.00 duplic
 
         # 2. Execute SQL with guardrails & deterministic correction
         try:
-            sql_res = duckdb_sql(planned_sql, purpose="Custom AI-planned query")
+            sql_res = duckdb_sql(planned_sql, purpose="Custom AI-planned query", params=planned_params)
         except SqlSemanticError as err:
             yield {
                 "type": "sql_retry",
@@ -677,8 +696,8 @@ Approving this payout would have caused an unrecoverable **₹1,25,000.00 duplic
                 "error": str(err),
                 "healing_strategy": "Deterministic Guardrail Active: Restructuring query to defensive CTE and applying strict ROW_NUMBER() window function."
             }
-            healed_sql = _build_deterministic_sql(query_text, narration_text, plan_result.get("parsed_intent"))
-            sql_res = duckdb_sql(healed_sql, purpose="Guarded custom SQL query")
+            healed_sql, healed_params = _build_deterministic_sql(query_text, narration_text, plan_result.get("parsed_intent"))
+            sql_res = duckdb_sql(healed_sql, purpose="Guarded custom SQL query", params=healed_params)
 
         yield {"type": "observation", "tool": "duckdb_sql", "result": sql_res}
 
@@ -725,11 +744,23 @@ Approving this payout would have caused an unrecoverable **₹1,25,000.00 duplic
                 {"action": "DEMAND_VALID_UTR_PROOF", "case_id": case_id, "reason": guidance_msg},
                 {"action": "RECHECK_NEXT_SETTLEMENT_CYCLE", "as_of_date": stmt_date}
             ]
+            not_found_checklist = {
+                "checked": [
+                    f"Bank Statement Search (0 matching rows as of {stmt_date})",
+                    "Razorpay UPI Gateway Search (0 matching transactions)",
+                    "Tally ERP Ledger Search (0 matching invoices)"
+                ],
+                "pending_human_signoff": [
+                    "Demand counterparty 12-digit UTR / bank advice proof",
+                    "Re-audit next NEFT/UPI settlement cycle"
+                ]
+            }
             verdict = conclude_brief(
                 headline=f"Not Found in Statement as of {stmt_date} ({case_id})",
                 decision="NOT_FOUND_IN_STATEMENT",
                 markdown_brief=memo_res["memo"],
-                actions=actions
+                actions=actions,
+                verification_checklist=not_found_checklist
             )
             yield {"type": "verdict", "data": verdict}
             return
@@ -755,39 +786,180 @@ Approving this payout would have caused an unrecoverable **₹1,25,000.00 duplic
         )
         yield {"type": "finding", "data": cit1}
 
-        # Check for discrepancies in the matched row:
+        # Extract parsed intent fields
+        parsed_intent = plan_result.get("parsed_intent") or parse_investigation_intent(query_text, narration_text)
+        claimed_amount = parsed_intent.get("amount")
+        claimed_direction = parsed_intent.get("direction")
+        intent_type = parsed_intent.get("intent")
+        claimed_vendor = parsed_intent.get("vendor_query") if intent_type in ("VENDOR_LOOKUP", "GENERAL_AUDIT") else None
+
+        # Extract matched ledger row fields
+        ledger_vendor = str(row_dict.get("vendor_name") or "")
+        ledger_withdrawal = float(row_dict.get("withdrawal") or row_dict.get("bank_withdrawal") or 0.0)
+        ledger_deposit = float(row_dict.get("deposit") or row_dict.get("bank_deposit") or 0.0)
+        ledger_total = float(row_dict.get("total_amount") or row_dict.get("gross_amount") or 0.0)
+        if ledger_total == 0.0:
+            ledger_total = ledger_withdrawal if ledger_withdrawal > 0 else ledger_deposit
+        upi_status = str(row_dict.get("status") or "").lower()
         filing_status = str(row_dict.get("gstr2b_filing_status") or row_dict.get("filing_status") or "").upper()
         itc_eligible = float(row_dict.get("gstr2b_itc") or row_dict.get("itc_eligible_amount") or 0.0)
         igst_amt = float(row_dict.get("igst_amount") or 0.0)
-        total_amt = float(row_dict.get("total_amount") or row_dict.get("gross_amount") or row_dict.get("withdrawal") or row_dict.get("deposit") or 0.0)
-        upi_status = str(row_dict.get("status") or "").lower()
 
-        is_reconciled = False
-        is_discrepancy = False
+        # -----------------------------------------------------------------
+        # Strict Evidence-Comparison Verdict Gates (Never default to reconciled)
+        # -----------------------------------------------------------------
+        decision = "INCONCLUSIVE_MANUAL_REVIEW"
         hold_val = 0.0
         discrepancy_reason = ""
+        headline = ""
+        actions: List[Dict[str, Any]] = []
+        checklist: Dict[str, List[str]] = {"checked": [], "pending_human_signoff": []}
 
-        if filing_status == "FILED":
-            is_reconciled = True
+        # GATE 1: Gateway Status Blocked
+        if upi_status in ("disputed", "refunded", "failed_at_switch", "failed"):
+            decision = "GATEWAY_STATUS_BLOCKED"
+            hold_val = ledger_total
+            discrepancy_reason = f"UPI switch/gateway status is '{upi_status}' for payment reference {ref_id}. Funds remain stalled at banking node."
+            headline = f"Gateway Blocked: UPI Status '{upi_status.upper()}' ({case_id})"
+            checklist = {
+                "checked": [
+                    f"Gateway Status Confirmed: {upi_status.upper()}",
+                    f"Payment Reference: {ref_id}",
+                    f"Disputed Gross Amount: ₹{ledger_total:,.2f}"
+                ],
+                "pending_human_signoff": [
+                    "Transmit NPCI switch clearing proof to customer's issuing bank",
+                    "Block merchant account debit and await automated reversal"
+                ]
+            }
+            actions = [
+                {"action": "BLOCK_MERCHANT_REFUND", "payment_id": ref_id, "amount": hold_val},
+                {"action": "TRANSMIT_NPCI_CLEARING_PROOF", "ref": ref_id}
+            ]
+
+        # GATE 2: Cash-Flow Direction Mismatch
+        elif claimed_direction == "INBOUND" and ledger_withdrawal > 0 and ledger_deposit == 0:
+            decision = "DIRECTION_MISMATCH"
+            hold_val = ledger_withdrawal
+            discrepancy_reason = f"Direction mismatch: Claimed inbound credit/deposit, but bank statement records an outgoing withdrawal/debit of ₹{ledger_withdrawal:,.2f}."
+            headline = f"Direction Mismatch: Inbound Claim vs Outbound Debit ({case_id})"
+            checklist = {
+                "checked": [
+                    f"Bank Statement Match Confirmed (Row {ref_id})",
+                    "Direction Check: Claimed INBOUND CREDIT vs Ledger OUTGOING WITHDRAWAL",
+                    f"Outgoing Debit Amount: ₹{ledger_withdrawal:,.2f}"
+                ],
+                "pending_human_signoff": [
+                    "Obtain certified credit advice from remitting bank",
+                    "Investigate purpose of outgoing bank withdrawal"
+                ]
+            }
+            actions = [
+                {"action": "FREEZE_PAYOUT", "reference_id": ref_id, "amount": hold_val},
+                {"action": "DEMAND_CREDIT_ADVICE", "counterparty": entity_desc}
+            ]
+
+        elif claimed_direction == "OUTBOUND" and ledger_deposit > 0 and ledger_withdrawal == 0:
+            decision = "DIRECTION_MISMATCH"
+            hold_val = ledger_deposit
+            discrepancy_reason = f"Direction mismatch: Claimed outbound disbursement, but bank statement records an incoming deposit of ₹{ledger_deposit:,.2f}."
+            headline = f"Direction Mismatch: Outbound Claim vs Inbound Deposit ({case_id})"
+            checklist = {
+                "checked": [
+                    f"Bank Statement Match Confirmed (Row {ref_id})",
+                    "Direction Check: Claimed OUTBOUND vs Ledger INCOMING DEPOSIT",
+                    f"Deposit Amount: ₹{ledger_deposit:,.2f}"
+                ],
+                "pending_human_signoff": [
+                    "Verify counterparty credit memo",
+                    "Confirm accounting ledger debit entry"
+                ]
+            }
+            actions = [
+                {"action": "HOLD_PAYOUT", "reference_id": ref_id, "amount": hold_val}
+            ]
+
+        # GATE 3: Amount Mismatch (Tolerance 0.01)
+        elif claimed_amount is not None and ledger_total > 0 and abs(claimed_amount - ledger_total) > 0.01:
+            delta = abs(claimed_amount - ledger_total)
+            decision = "AMOUNT_MISMATCH"
+            hold_val = delta
+            discrepancy_reason = f"Amount mismatch detected: Claimed ₹{claimed_amount:,.2f}, ledger shows ₹{ledger_total:,.2f} (delta ₹{delta:,.2f})."
+            headline = f"Amount Mismatch: Claimed ₹{claimed_amount:,.2f} vs Ledger ₹{ledger_total:,.2f} ({case_id})"
+            checklist = {
+                "checked": [
+                    f"Matched Ledger Record: {ref_id}",
+                    f"Claimed Figure: ₹{claimed_amount:,.2f}",
+                    f"Ledger Recorded Figure: ₹{ledger_total:,.2f}",
+                    f"Identified Variance Held: ₹{delta:,.2f}"
+                ],
+                "pending_human_signoff": [
+                    "Obtain revised invoice or debit/credit note",
+                    "Finance Controller sign-off on amount variance"
+                ]
+            }
+            actions = [
+                {"action": "HOLD_DISPUTED_DELTA", "reference_id": ref_id, "variance_amount": delta},
+                {"action": "ISSUE_VARIANCE_NOTICE", "counterparty": entity_desc}
+            ]
+
+        # GATE 4: Vendor Identity Mismatch (Jaro-Winkler < 0.90)
+        elif claimed_vendor and ledger_vendor and jw_sim(norm_indic_vendor(claimed_vendor), norm_indic_vendor(ledger_vendor)) < 0.90:
+            v_sim = jw_sim(norm_indic_vendor(claimed_vendor), norm_indic_vendor(ledger_vendor))
+            decision = "VENDOR_MISMATCH"
+            hold_val = ledger_total
+            discrepancy_reason = f"Vendor identity mismatch: Claimed '{claimed_vendor}', ledger matches '{ledger_vendor}' (JW similarity {v_sim:.2f} < 0.90)."
+            headline = f"Vendor Identity Mismatch: JW Sim {v_sim:.2f} ({case_id})"
+            checklist = {
+                "checked": [
+                    f"Ledger Row Matched: {ref_id}",
+                    f"Claimed Entity: {claimed_vendor}",
+                    f"Ledger Entity: {ledger_vendor}",
+                    f"String Similarity: {v_sim:.2f} (Below 0.90 threshold)"
+                ],
+                "pending_human_signoff": [
+                    "Validate GSTIN and PAN of claiming entity",
+                    "Obtain corporate name change authorization"
+                ]
+            }
+            actions = [
+                {"action": "BLOCK_DISBURSEMENT_IDENTITY", "reference_id": ref_id, "amount": hold_val},
+                {"action": "REQUIRE_KYC_VERIFICATION", "entity": claimed_vendor}
+            ]
+
+        # GATE 5: GST / Tax Filing Gate
         elif filing_status == "NOT_FILED":
-            is_discrepancy = True
-            hold_val = igst_amt if igst_amt > 0 else round(total_amt * 0.18 / 1.18, 2)
-            discrepancy_reason = f"GSTR-2B filing unfiled under Section 16(2)(aa). Withholding tax component of ₹{hold_val:,.2f}."
-        elif upi_status == "captured":
-            is_reconciled = True
-        elif upi_status in ("failed_at_switch", "failed"):
-            is_discrepancy = True
-            hold_val = total_amt
-            discrepancy_reason = f"UPI switch failure detected for amount ₹{hold_val:,.2f}. Funds remain at banking node."
-        elif "bank_row" in row_dict and row_dict.get("bank_row") is not None:
-            is_reconciled = True
-        else:
-            is_reconciled = True
+            decision = "HOLD_DISPUTED_PORTION"
+            hold_val = igst_amt if igst_amt > 0 else round(ledger_total * 0.18 / 1.18, 2)
+            discrepancy_reason = f"GSTR-2B filing missing/unfiled under Section 16(2)(aa). Withholding tax component of ₹{hold_val:,.2f}."
+            headline = f"Missing GSTR-2B Filing Hold: ₹{hold_val:,.2f} ({case_id})"
+            checklist = {
+                "checked": [
+                    f"Tally Invoice Total: ₹{ledger_total:,.2f}",
+                    "GSTR-2B Portal Status: NOT_FILED",
+                    f"Statutory Section 16(2)(aa) Withholding: ₹{hold_val:,.2f}"
+                ],
+                "pending_human_signoff": [
+                    "Verify monthly GSTR-2B auto-population cycle",
+                    "Obtain supplier GSTR-1 filing ARN proof"
+                ]
+            }
+            actions = [
+                {"action": "HOLD_TAX_PORTION", "invoice_id": ref_id, "amount": hold_val},
+                {"action": "APPROVE_BASE_PAYOUT", "net_amount": round(ledger_total - hold_val, 2)}
+            ]
 
-        # -----------------------------------------------------------------
-        # BRANCH B: Matched & Reconciled (No Discrepancy Found)
-        # -----------------------------------------------------------------
-        if is_reconciled and not is_discrepancy:
+        # GATE 6: Reconciled with Zero Variance
+        elif (
+            (filing_status == "FILED" or ("gstr2b_filing_status" not in row_dict and upi_status in ("captured", "") and ledger_total > 0))
+            and upi_status in ("captured", "")
+            and (claimed_amount is None or abs(claimed_amount - ledger_total) <= 0.01)
+            and (claimed_direction is None or not ((claimed_direction == "INBOUND" and ledger_withdrawal > 0) or (claimed_direction == "OUTBOUND" and ledger_deposit > 0)))
+            and (not claimed_vendor or not ledger_vendor or jw_sim(norm_indic_vendor(claimed_vendor), norm_indic_vendor(ledger_vendor)) >= 0.90)
+        ):
+            decision = "NO_DISCREPANCY_FOUND"
+            hold_val = 0.0
+            headline = f"No Discrepancy Found: {entity_desc} ({case_id})"
             if filing_status == "FILED":
                 cit2 = record_finding(
                     title="GSTR-2B Filing Compliance Verified",
@@ -797,14 +969,54 @@ Approving this payout would have caused an unrecoverable **₹1,25,000.00 duplic
                     row_id=ref_id
                 )
                 yield {"type": "finding", "data": cit2}
+            checklist = {
+                "checked": [
+                    "Bank statement settlement & narration verified",
+                    "Razorpay UPI RRN & transaction status confirmed",
+                    "Tally invoice total matches supporting tax records",
+                    f"GSTR-2B supplier filing status confirmed ({filing_status or 'SETTLED'})"
+                ],
+                "pending_human_signoff": [
+                    "Duplicate invoice check across prior financial years",
+                    "Beneficiary bank account ownership verification",
+                    "Physical goods delivery (GRN) or service acceptance"
+                ]
+            }
+            actions = [
+                {"action": "APPROVE_DISBURSEMENT", "reference_id": ref_id, "amount": ledger_total},
+                {"action": "CLOSE_RECONCILIATION_TICKET", "case_id": case_id}
+            ]
 
-            # AI JOB 2: Plain-language executive memo
+        # GATE 7: Fallback Default: INCONCLUSIVE_MANUAL_REVIEW
+        else:
+            decision = "INCONCLUSIVE_MANUAL_REVIEW"
+            hold_val = ledger_total
+            discrepancy_reason = "Evidence matched on ledger but fails strict automated zero-variance reconciliation criteria. Manual sign-off required."
+            headline = f"Inconclusive Match: Manual Review Required ({case_id})"
+            checklist = {
+                "checked": [
+                    f"Ledger Row Matched: {ref_id}"
+                ],
+                "pending_human_signoff": [
+                    "Inspect underlying purchase order and commercial contract",
+                    "Verify physical GRN and counterparty signature",
+                    "Obtain secondary bank statement reconciliation certificate"
+                ]
+            }
+            actions = [
+                {"action": "ESCALATE_TO_CONTROLLER", "reference_id": ref_id, "amount": hold_val}
+            ]
+
+        # -----------------------------------------------------------------
+        # Verdict Execution: Reconciled vs Hold
+        # -----------------------------------------------------------------
+        if decision == "NO_DISCREPANCY_FOUND":
             memo_ctx = {
                 "case_id": case_id,
                 "entity": entity_desc,
                 "decision": "NO_DISCREPANCY_FOUND",
                 "ref_id": ref_id,
-                "amount": total_amt,
+                "amount": ledger_total,
                 "summary_text": query_text
             }
             yield {
@@ -819,22 +1031,17 @@ Approving this payout would have caused an unrecoverable **₹1,25,000.00 duplic
                 "result": {"status": "synthesized", "provider": memo_res["provider"], "latency_ms": memo_res["latency_ms"]}
             }
 
-            actions = [
-                {"action": "APPROVE_DISBURSEMENT", "reference_id": ref_id, "amount": total_amt},
-                {"action": "CLOSE_RECONCILIATION_TICKET", "case_id": case_id}
-            ]
             verdict = conclude_brief(
-                headline=f"No Discrepancy Found: {entity_desc} ({case_id})",
-                decision="NO_DISCREPANCY_FOUND",
+                headline=headline,
+                decision=decision,
                 markdown_brief=memo_res["memo"],
-                actions=actions
+                actions=actions,
+                verification_checklist=checklist
             )
             yield {"type": "verdict", "data": verdict}
             return
 
-        # -----------------------------------------------------------------
-        # BRANCH C: Matched with Discrepancy (Hold disputed portion)
-        # -----------------------------------------------------------------
+        # Any Hold / Discrepancy / Review Verdict: Run Runway Calculation
         balance_sql = """
         WITH latest_bal AS (
             SELECT running_balance 
@@ -859,13 +1066,13 @@ Approving this payout would have caused an unrecoverable **₹1,25,000.00 duplic
         runway_calc = calculate_emi_runway(
             current_balance=curr_balance,
             upcoming_emi=upcoming_emi,
-            total_payout=total_amt,
+            total_payout=ledger_total,
             amount_held=hold_val
         )
 
         cit2 = record_finding(
             title="Debt Service Protection & Liquidity Assessment",
-            detail=f"Operating bank balance is {runway_calc['formatted']['current_bank_balance']}. Upcoming critical EMI is {runway_calc['formatted']['upcoming_30d_critical_emi']}. Disbursing full payout leaves {runway_calc['formatted']['post_emi_free_cash_without_praman']} free buffer ({runway_calc['formatted']['coverage_without_praman']} coverage).",
+            detail=f"Operating bank balance is {runway_calc['formatted']['current_bank_balance']}. Upcoming critical EMI is {runway_calc['formatted']['upcoming_30d_critical_emi']}. Disbursing unmitigated payout leaves {runway_calc['formatted']['post_emi_free_cash_without_praman']} free buffer ({runway_calc['formatted']['coverage_without_praman']} coverage).",
             citation_id="CIT-2",
             source_table="cashflow_commitments",
             row_id="COM-001"
@@ -876,16 +1083,18 @@ Approving this payout would have caused an unrecoverable **₹1,25,000.00 duplic
         memo_ctx = {
             "case_id": case_id,
             "entity": entity_desc,
-            "decision": "HOLD_DISPUTED_PORTION",
+            "decision": decision,
             "ref_id": ref_id,
+            "amount": ledger_total,
             "amount_held": hold_val,
+            "disputed_delta": hold_val if decision == "AMOUNT_MISMATCH" else None,
             "summary_text": discrepancy_reason,
             "cashflow": runway_calc["formatted"]
         }
         yield {
             "type": "action",
             "tool": "ai_synthesize_memo",
-            "args": {"case_id": case_id, "decision": "HOLD_DISPUTED_PORTION"}
+            "args": {"case_id": case_id, "decision": decision}
         }
         memo_res = ai_synthesize_memo(memo_ctx)
         yield {
@@ -894,15 +1103,12 @@ Approving this payout would have caused an unrecoverable **₹1,25,000.00 duplic
             "result": {"status": "synthesized", "provider": memo_res["provider"], "latency_ms": memo_res["latency_ms"]}
         }
 
-        actions = [
-            {"action": "HOLD_PAYOUT", "reference_id": ref_id, "amount": hold_val},
-            {"action": "RINGFENCE_LIQUIDITY", "commitment_id": "COM-001", "amount": upcoming_emi}
-        ]
         verdict = conclude_brief(
-            headline=f"Discrepancy Hold Enforced: {entity_desc} ({case_id})",
-            decision="HOLD_DISPUTED_PORTION",
+            headline=headline,
+            decision=decision,
             markdown_brief=memo_res["memo"],
-            actions=actions
+            actions=actions,
+            verification_checklist=checklist
         )
         yield {"type": "verdict", "data": verdict}
 

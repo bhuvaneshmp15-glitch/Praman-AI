@@ -17,66 +17,69 @@ def stream_case_investigation(case_id: str):
     case_key = case["case_id"]
 
     def event_generator():
-        # 1. trigger_received event
-        yield f"event: trigger_received\ndata: {json.dumps({'case_id': case_key, 'title': case['title'], 'status': 'INVESTIGATING', 'timestamp': datetime.now().isoformat()})}\n\n"
+        try:
+            # 1. trigger_received event
+            yield f"event: trigger_received\ndata: {json.dumps({'case_id': case_key, 'title': case['title'], 'status': 'INVESTIGATING', 'timestamp': datetime.now().isoformat()})}\n\n"
 
-        # Stream through agent steps
-        for event in run_investigation_sync(case_key, case_data=case):
-            evt_type = event.get("type")
+            # Stream through agent steps
+            for event in run_investigation_sync(case_key, case_data=case):
+                evt_type = event.get("type")
 
-            if evt_type == "thought":
-                yield f"event: agent_thought\ndata: {json.dumps({'thought': event.get('text')})}\n\n"
+                if evt_type == "thought":
+                    yield f"event: agent_thought\ndata: {json.dumps({'thought': event.get('text')})}\n\n"
 
-            elif evt_type == "action" and event.get("tool") == "duckdb_sql":
-                yield f"event: sql_attempt\ndata: {json.dumps({'phase': 'EXECUTE', 'raw_sql': event.get('args', {}).get('query'), 'purpose': event.get('args', {}).get('purpose')})}\n\n"
+                elif evt_type == "action" and event.get("tool") == "duckdb_sql":
+                    yield f"event: sql_attempt\ndata: {json.dumps({'phase': 'EXECUTE', 'raw_sql': event.get('args', {}).get('query'), 'purpose': event.get('args', {}).get('purpose')})}\n\n"
 
-            elif evt_type == "sql_retry":
-                yield f"event: sql_attempt\ndata: {json.dumps({'phase': 'RETRY_HEALING', 'status': 'GUARDRAIL_INTERCEPTED', 'error': event.get('error'), 'healing_strategy': event.get('healing_strategy'), 'attempt': event.get('attempt')})}\n\n"
+                elif evt_type == "sql_retry":
+                    yield f"event: sql_attempt\ndata: {json.dumps({'phase': 'RETRY_HEALING', 'status': 'GUARDRAIL_INTERCEPTED', 'error': event.get('error'), 'healing_strategy': event.get('healing_strategy'), 'attempt': event.get('attempt')})}\n\n"
 
-            elif evt_type == "observation" and event.get("tool") == "duckdb_sql":
-                res = event.get("result", {})
-                yield f"event: sql_attempt\ndata: {json.dumps({'phase': 'OBSERVATION', 'elapsed_ms': res.get('elapsed_ms'), 'row_count': res.get('row_count'), 'columns': res.get('columns')})}\n\n"
+                elif evt_type == "observation" and event.get("tool") == "duckdb_sql":
+                    res = event.get("result", {})
+                    yield f"event: sql_attempt\ndata: {json.dumps({'phase': 'OBSERVATION', 'elapsed_ms': res.get('elapsed_ms'), 'row_count': res.get('row_count'), 'columns': res.get('columns')})}\n\n"
 
-            elif evt_type == "observation" and event.get("tool") == "verify_ifsc_live":
-                yield f"event: ifsc_verified\ndata: {json.dumps(event.get('result', {}))}\n\n"
+                elif evt_type == "observation" and event.get("tool") == "verify_ifsc_live":
+                    yield f"event: ifsc_verified\ndata: {json.dumps(event.get('result', {}))}\n\n"
 
-            elif evt_type == "observation" and event.get("tool") == "verify_gst_state_pincode":
-                yield f"event: pincode_verified\ndata: {json.dumps(event.get('result', {}))}\n\n"
+                elif evt_type == "observation" and event.get("tool") == "verify_gst_state_pincode":
+                    yield f"event: pincode_verified\ndata: {json.dumps(event.get('result', {}))}\n\n"
 
-            elif evt_type == "observation" and event.get("tool") == "check_vendor_email_breach":
-                yield f"event: breach_checked\ndata: {json.dumps(event.get('result', {}))}\n\n"
+                elif evt_type == "observation" and event.get("tool") == "check_vendor_email_breach":
+                    yield f"event: breach_checked\ndata: {json.dumps(event.get('result', {}))}\n\n"
 
-            elif evt_type == "observation" and event.get("tool") == "fetch_live_usd_inr":
-                yield f"event: fx_retrieved\ndata: {json.dumps(event.get('result', {}))}\n\n"
+                elif evt_type == "observation" and event.get("tool") == "fetch_live_usd_inr":
+                    yield f"event: fx_retrieved\ndata: {json.dumps(event.get('result', {}))}\n\n"
 
-            elif evt_type == "action" and event.get("tool") == "ai_extract_intake":
-                yield f"event: ai_extract_intake\ndata: {json.dumps(event.get('args', {}))}\n\n"
+                elif evt_type == "action" and event.get("tool") == "ai_extract_intake":
+                    yield f"event: ai_extract_intake\ndata: {json.dumps(event.get('args', {}))}\n\n"
 
-            elif evt_type == "observation" and event.get("tool") == "ai_extract_intake":
-                yield f"event: ai_intake_extracted\ndata: {json.dumps({'extracted': event.get('result', {}), 'provider': event.get('provider'), 'latency_ms': event.get('latency_ms')})}\n\n"
+                elif evt_type == "observation" and event.get("tool") == "ai_extract_intake":
+                    yield f"event: ai_intake_extracted\ndata: {json.dumps({'extracted': event.get('result', {}), 'provider': event.get('provider'), 'latency_ms': event.get('latency_ms')})}\n\n"
 
-            elif evt_type == "action" and event.get("tool") == "ai_synthesize_memo":
-                yield f"event: ai_synthesize_memo\ndata: {json.dumps(event.get('args', {}))}\n\n"
+                elif evt_type == "action" and event.get("tool") == "ai_synthesize_memo":
+                    yield f"event: ai_synthesize_memo\ndata: {json.dumps(event.get('args', {}))}\n\n"
 
-            elif evt_type == "observation" and event.get("tool") == "ai_synthesize_memo":
-                yield f"event: ai_memo_synthesized\ndata: {json.dumps(event.get('result', {}))}\n\n"
+                elif evt_type == "observation" and event.get("tool") == "ai_synthesize_memo":
+                    yield f"event: ai_memo_synthesized\ndata: {json.dumps(event.get('result', {}))}\n\n"
 
-            elif evt_type == "finding":
-                yield f"event: finding_recorded\ndata: {json.dumps(event.get('data', {}))}\n\n"
+                elif evt_type == "finding":
+                    yield f"event: finding_recorded\ndata: {json.dumps(event.get('data', {}))}\n\n"
 
-            elif evt_type == "observation" and event.get("tool") == "calculate_emi_runway":
-                yield f"event: runway_calculated\ndata: {json.dumps(event.get('result', {}))}\n\n"
+                elif evt_type == "observation" and event.get("tool") == "calculate_emi_runway":
+                    yield f"event: runway_calculated\ndata: {json.dumps(event.get('result', {}))}\n\n"
 
-            elif evt_type == "verdict":
-                # Update case repository state to BRIEF_READY
-                verdict_data = event.get("data", {})
-                if case_key in CASE_STORE:
-                    CASE_STORE[case_key]["status"] = "BRIEF_READY"
-                    CASE_STORE[case_key]["brief"] = verdict_data
-                    CASE_STORE[case_key]["citations"] = verdict_data.get("citations", [])
-                    CASE_STORE[case_key]["actions"] = verdict_data.get("actions", [])
+                elif evt_type == "verdict":
+                    # Update case repository state to BRIEF_READY
+                    verdict_data = event.get("data", {})
+                    if case_key in CASE_STORE:
+                        CASE_STORE[case_key]["status"] = "BRIEF_READY"
+                        CASE_STORE[case_key]["brief"] = verdict_data
+                        CASE_STORE[case_key]["citations"] = verdict_data.get("citations", [])
+                        CASE_STORE[case_key]["actions"] = verdict_data.get("actions", [])
 
-                yield f"event: brief_completed\ndata: {json.dumps(verdict_data)}\n\n"
+                    yield f"event: brief_completed\ndata: {json.dumps(verdict_data)}\n\n"
+        except Exception as exc:
+            yield f"event: error\ndata: {json.dumps({'type': 'error', 'message': str(exc), 'case_id': case_key})}\n\n"
 
     return StreamingResponse(
         event_generator(),
