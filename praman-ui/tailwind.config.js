@@ -37,8 +37,8 @@ export default {
         }
       },
       fontFamily: {
-        serif: ['Newsreader', 'Spectral', 'Georgia', 'serif'],
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        serif: ['"Instrument Serif"', 'Newsreader', 'Spectral', 'Georgia', 'serif'],
+        sans: ['"Plus Jakarta Sans"', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
         mono: ['JetBrains Mono', 'Geist Mono', 'Fira Code', 'monospace'],
       },
       boxShadow: {

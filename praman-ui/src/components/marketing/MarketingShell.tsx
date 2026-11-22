@@ -7,9 +7,9 @@ interface MarketingShellProps {
 
 export const MarketingShell: React.FC<MarketingShellProps> = ({ onOpenWorkspace }) => {
   return (
-    <header className="sticky top-0 z-50 bg-[#070709]/80 backdrop-blur-md border-b border-white/[0.08] transition-all">
+    <header className="sticky top-0 z-50 bg-[#000000]/80 backdrop-blur-md border-b border-white/[0.08] transition-all">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
-        {/* Brand Mark: Concentric Emerald Arc Logo */}
+        {/* Brand Mark: Concentric Emerald Arc Logo + Praman */}
         <div
           className="flex items-center gap-3 cursor-pointer group"
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
@@ -49,11 +49,8 @@ export const MarketingShell: React.FC<MarketingShellProps> = ({ onOpenWorkspace 
           </div>
 
           <div className="flex items-baseline gap-2">
-            <span className="font-serif text-xl font-bold text-white tracking-tight group-hover:text-emerald-400 transition-colors">
+            <span className="font-sans text-xl font-bold text-white tracking-tight group-hover:text-emerald-400 transition-colors">
               Praman
-            </span>
-            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-white/[0.06] text-stone-300 border border-white/[0.08] font-semibold uppercase tracking-wider hidden sm:inline-block">
-              Arthaton 2026
             </span>
           </div>
         </div>
@@ -69,21 +66,13 @@ export const MarketingShell: React.FC<MarketingShellProps> = ({ onOpenWorkspace 
           <a href="#guardrails" className="hover:text-white transition-colors">
             GST &amp; EMI Guardrails
           </a>
-          <a href="#metrics" className="hover:text-white transition-colors">
-            Engine Specs
+          <a href="#prototype" className="hover:text-white transition-colors">
+            Prototype
           </a>
         </nav>
 
         {/* Right Action CTAs */}
         <div className="flex items-center gap-3">
-          <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-full border border-emerald-500/30 bg-emerald-950/40 text-emerald-300 text-[11px] font-mono">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-            <span>10,040 Rows Indexed</span>
-          </div>
-
           <a
             href="https://github.com/Bhuvanesh-MP/Praman-AI"
             target="_blank"
@@ -94,13 +83,12 @@ export const MarketingShell: React.FC<MarketingShellProps> = ({ onOpenWorkspace 
             <Github className="w-4 h-4" />
           </a>
 
-          {/* Crisp White Pill Button (Direct to /workspace, no login gate) */}
+          {/* Clean White Pill Button ("Launch Workspace" matching Screenshot 1 "Sign in") */}
           <button
             onClick={() => onOpenWorkspace()}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-white hover:bg-stone-100 text-stone-950 font-sans text-xs font-bold shadow-sm transition active:scale-98 cursor-pointer"
+            className="px-4 py-1.5 rounded-full bg-white hover:bg-stone-200 text-black font-sans text-xs font-semibold shadow-sm transition active:scale-98 cursor-pointer"
           >
-            <span>Launch Workspace</span>
-            <ArrowRight className="w-3.5 h-3.5" />
+            Launch Workspace
           </button>
         </div>
       </div>

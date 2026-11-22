@@ -4,7 +4,8 @@
 
 @layer base {
   body {
-    font-family: 'Inter', sans-serif;
+    font-family: 'Plus Jakarta Sans', 'Inter', sans-serif;
+    background-color: #000000;
   }
 }
 
@@ -14,101 +15,291 @@
   height: 6px;
 }
 .terminal-scroll::-webkit-scrollbar-track {
-  background: #0D1117;
+  background: #090705;
 }
 .terminal-scroll::-webkit-scrollbar-thumb {
-  background: #30363D;
+  background: #25221f;
   border-radius: 3px;
 }
 .terminal-scroll::-webkit-scrollbar-thumb:hover {
-  background: #58A6FF;
+  background: #39ac58;
 }
 
-/* Custom paper scrollbar */
-.paper-scroll::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-.paper-scroll::-webkit-scrollbar-track {
-  background: #FAF8F5;
-}
-.paper-scroll::-webkit-scrollbar-thumb {
-  background: #E5E0D8;
-  border-radius: 3px;
-}
-.paper-scroll::-webkit-scrollbar-thumb:hover {
-  background: #D5CFC5;
-}
-
-@keyframes pulse-subtle {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
-.animate-pulse-subtle {
-  animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-/* Organic botanical sway & float animations */
-@keyframes botanical-sway-1 {
-  0%, 100% {
-    transform: rotate(0deg) skewX(0deg) translate3d(0, 0, 0);
-  }
-  33% {
-    transform: rotate(2.5deg) skewX(1.5deg) translate3d(4px, -3px, 0);
-  }
-  66% {
-    transform: rotate(-2deg) skewX(-1.2deg) translate3d(-3px, 2px, 0);
-  }
-}
-
-@keyframes botanical-sway-2 {
-  0%, 100% {
-    transform: rotate(0deg) skewX(0deg) translate3d(0, 0, 0);
-  }
-  40% {
-    transform: rotate(-3deg) skewX(-2deg) translate3d(-5px, -4px, 0);
-  }
-  80% {
-    transform: rotate(2deg) skewX(1.2deg) translate3d(3px, 2px, 0);
-  }
-}
-
-@keyframes botanical-sway-3 {
-  0%, 100% {
-    transform: rotate(0deg) translate3d(0, 0, 0);
+/* Ken Burns slow background drift (40s loop) */
+@keyframes kenBurnsDrift {
+  0% {
+    transform: scale(1) translate3d(0%, 0%, 0);
   }
   50% {
-    transform: rotate(1.8deg) translate3d(3px, -5px, 0);
+    transform: scale(1.08) translate3d(-1.5%, -1%, 0);
+  }
+  100% {
+    transform: scale(1.03) translate3d(1.2%, 0.8%, 0);
   }
 }
 
-@keyframes glow-pulse {
+/* Window entrance */
+@keyframes heroWindowEnter {
+  0% {
+    opacity: 0;
+    transform: translateY(24px) scale(0.97);
+    filter: blur(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0px);
+  }
+}
+
+/* Tab crossfade + 8px vertical slide (250ms) */
+@keyframes tabSlideCrossfade {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Realistic organic flower sway animations */
+@keyframes flowerSwayLeft {
   0%, 100% {
-    opacity: 0.45;
-    transform: scale(1);
+    transform: rotate(0deg) skewX(0deg) translate3d(0, 0, 0);
+  }
+  30% {
+    transform: rotate(4.2deg) skewX(2deg) translate3d(7px, -4px, 0);
+  }
+  65% {
+    transform: rotate(-3.5deg) skewX(-1.5deg) translate3d(-5px, 2px, 0);
+  }
+}
+
+@keyframes flowerSwayRight {
+  0%, 100% {
+    transform: rotate(0deg) skewX(0deg) translate3d(0, 0, 0);
+  }
+  35% {
+    transform: rotate(-4.5deg) skewX(-2deg) translate3d(-8px, -3px, 0);
+  }
+  75% {
+    transform: rotate(3.8deg) skewX(1.8deg) translate3d(6px, 3px, 0);
+  }
+}
+
+@keyframes flowerHeadNod {
+  0%, 100% {
+    transform: rotate(0deg) scale(1);
+  }
+  35% {
+    transform: rotate(5deg) scale(1.04);
+  }
+  70% {
+    transform: rotate(-3deg) scale(0.98);
+  }
+}
+
+/* Floating golden flower petals drifting in the breeze */
+@keyframes floatingPetal1 {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.95;
+  }
+  85% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate3d(120px, -140px, 0) rotate(260deg);
+    opacity: 0;
+  }
+}
+
+@keyframes floatingPetal2 {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.9;
+  }
+  80% {
+    opacity: 0.75;
+  }
+  100% {
+    transform: translate3d(-100px, -160px, 0) rotate(-220deg);
+    opacity: 0;
+  }
+}
+
+@keyframes floatingPetal3 {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+    opacity: 0;
+  }
+  25% {
+    opacity: 0.85;
+  }
+  75% {
+    opacity: 0.7;
+  }
+  100% {
+    transform: translate3d(70px, -180px, 0) rotate(320deg);
+    opacity: 0;
+  }
+}
+
+/* Sunbeam breathing shimmer */
+@keyframes sunbeamShimmer {
+  0%, 100% {
+    opacity: 0.55;
+    transform: scale(1) rotate(0deg);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.04) rotate(1.5deg);
+  }
+}
+
+/* Water ripple glimmer */
+@keyframes waterGlimmer {
+  0%, 100% {
+    opacity: 0.35;
+    transform: scaleX(1);
   }
   50% {
     opacity: 0.75;
-    transform: scale(1.04);
+    transform: scaleX(1.06);
   }
 }
 
-.animate-sway-1 {
-  animation: botanical-sway-1 8s ease-in-out infinite;
+/* Floating golden pollen / sunlight dust */
+@keyframes floatingPollen {
+  0% {
+    transform: translateY(0) translateX(0) scale(0.8);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.9;
+  }
+  80% {
+    opacity: 0.7;
+  }
+  100% {
+    transform: translateY(-110px) translateX(30px) scale(1.15);
+    opacity: 0;
+  }
+}
+
+/* Pulsing live badge */
+@keyframes pulse-live {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+}
+
+.animate-ken-burns {
+  animation: kenBurnsDrift 40s ease-in-out infinite alternate;
+}
+
+.animate-window-enter {
+  animation: heroWindowEnter 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-tab-switch {
+  animation: tabSlideCrossfade 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-flower-sway-1 {
+  animation: flowerSwayLeft 7s ease-in-out infinite;
   transform-origin: bottom center;
 }
 
-.animate-sway-2 {
-  animation: botanical-sway-2 9.5s ease-in-out infinite;
+.animate-flower-sway-2 {
+  animation: flowerSwayRight 8.5s ease-in-out infinite;
   transform-origin: bottom left;
 }
 
-.animate-sway-3 {
-  animation: botanical-sway-3 7s ease-in-out infinite;
+.animate-flower-sway-3 {
+  animation: flowerSwayLeft 6.2s ease-in-out infinite;
   transform-origin: bottom right;
 }
 
-.animate-glow-pulse {
-  animation: glow-pulse 6s ease-in-out infinite;
+.animate-flower-head {
+  animation: flowerHeadNod 5.2s ease-in-out infinite;
+  transform-origin: center center;
+}
+
+.animate-sunbeam {
+  animation: sunbeamShimmer 6s ease-in-out infinite;
+  transform-origin: top left;
+}
+
+.animate-water-glimmer {
+  animation: waterGlimmer 4.5s ease-in-out infinite;
+  transform-origin: center bottom;
+}
+
+.animate-petal-1 {
+  animation: floatingPetal1 8s ease-in-out infinite;
+}
+
+.animate-petal-2 {
+  animation: floatingPetal2 10s ease-in-out infinite 2s;
+}
+
+.animate-petal-3 {
+  animation: floatingPetal3 9s ease-in-out infinite 4s;
+}
+
+.animate-pulse-live {
+  animation: pulse-live 2s ease-in-out infinite;
+}
+
+.animate-pollen-1 {
+  animation: floatingPollen 6s ease-in-out infinite;
+}
+.animate-pollen-2 {
+  animation: floatingPollen 8s ease-in-out infinite 1.5s;
+}
+.animate-pollen-3 {
+  animation: floatingPollen 7s ease-in-out infinite 3s;
+}
+.animate-pollen-4 {
+  animation: floatingPollen 9s ease-in-out infinite 4.5s;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .animate-ken-burns,
+  .animate-flower-sway-1,
+  .animate-flower-sway-2,
+  .animate-flower-sway-3,
+  .animate-flower-head,
+  .animate-sunbeam,
+  .animate-water-glimmer,
+  .animate-petal-1,
+  .animate-petal-2,
+  .animate-petal-3,
+  .animate-pollen-1,
+  .animate-pollen-2,
+  .animate-pollen-3,
+  .animate-pollen-4 {
+    animation: none !important;
+  }
+  .animate-window-enter {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+  }
 }
