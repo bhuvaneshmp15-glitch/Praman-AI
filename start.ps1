@@ -30,22 +30,24 @@ try {
 }
 
 # 2. Check and seed DuckDB / raw synthetic financial datasets if missing
-$duckdbPath = "praman-data\praman.duckdb"
-$csvPath = "praman-data\raw_csvs\bank_statement.csv"
+$duckdbPath = "backend\praman-data\praman.duckdb"
+$csvPath = "backend\praman-data\raw_csvs\bank_statement.csv"
 
 if (-not (Test-Path $duckdbPath) -or -not (Test-Path $csvPath)) {
     Write-Host "[1/3] Generating 10,040+ realistic noisy Indian financial rows..." -ForegroundColor Yellow
+    Push-Location "backend"
     python praman-data\generator.py
     python praman-data\patch_scenarios.py
     python praman-data\seed_duckdb.py
+    Pop-Location
 } else {
     Write-Host "[1/3] DuckDB analytical store (praman.duckdb) and 10,040+ CSV rows verified." -ForegroundColor Green
 }
 
 # 3. Check and install frontend packages if node_modules is missing
-if (-not (Test-Path "praman-ui\node_modules")) {
-    Write-Host "[*] Installing frontend dependencies in praman-ui..." -ForegroundColor Yellow
-    Push-Location "praman-ui"
+if (-not (Test-Path "frontend\node_modules")) {
+    Write-Host "[*] Installing frontend dependencies in frontend..." -ForegroundColor Yellow
+    Push-Location "frontend"
     npm install
     Pop-Location
 }
@@ -54,14 +56,14 @@ if (-not (Test-Path "praman-ui\node_modules")) {
 $scriptRoot = $PSScriptRoot
 if (-not $scriptRoot) { $scriptRoot = Get-Location }
 
-$env:PYTHONPATH = "$scriptRoot\praman-api\src"
+$env:PYTHONPATH = "$scriptRoot\backend\src"
 
 Write-Host ""
 Write-Host "[2/3] Starting FastAPI Backend on http://127.0.0.1:8000 ..." -ForegroundColor Cyan
-$apiProcess = Start-Process -FilePath "python" -ArgumentList "-m", "uvicorn", "praman_api.main:app", "--host", "127.0.0.1", "--port", "8000" -PassThru -NoNewWindow
+$apiProcess = Start-Process -FilePath "python" -ArgumentList "-m", "uvicorn", "praman_api.main:app", "--host", "127.0.0.1", "--port", "8000" -WorkingDirectory "$scriptRoot\backend" -PassThru -NoNewWindow
 
 Write-Host "[3/3] Starting Vite Frontend on http://127.0.0.1:5173 ..." -ForegroundColor Cyan
-$uiProcess = Start-Process -FilePath "npm.cmd" -ArgumentList "run", "dev", "--", "--port", "5173", "--host", "127.0.0.1" -WorkingDirectory "$scriptRoot\praman-ui" -PassThru -NoNewWindow
+$uiProcess = Start-Process -FilePath "npm.cmd" -ArgumentList "run", "dev", "--", "--port", "5173", "--host", "127.0.0.1" -WorkingDirectory "$scriptRoot\frontend" -PassThru -NoNewWindow
 
 Write-Host ""
 Write-Host "======================================================================" -ForegroundColor Green

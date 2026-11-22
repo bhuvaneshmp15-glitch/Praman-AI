@@ -236,20 +236,20 @@ powershell -ExecutionPolicy Bypass -File .\start.ps1
 python -m venv venv
 source venv/bin/activate  # On Windows: .\venv\Scripts\Activate.ps1
 
-pip install -r praman-api/requirements.txt
+pip install -r backend/requirements.txt
 
 # Seed the 10,040-row DuckDB store (if not already seeded)
-python praman-data/seed_duckdb.py
+python backend/praman-data/seed_duckdb.py
 
 # Launch FastAPI backend
-export PYTHONPATH="$PWD/praman-api/src"  # On Windows PowerShell: $env:PYTHONPATH="$PWD\praman-api\src"
+export PYTHONPATH="$PWD/backend/src"  # On Windows PowerShell: $env:PYTHONPATH="$PWD\backend\src"
 uvicorn praman_api.main:app --host 127.0.0.1 --port 8000
 ```
 
 #### 2. Frontend Setup
 ```bash
 # In a separate terminal
-cd praman-ui
+cd frontend
 npm install
 npm run dev
 ```
@@ -267,7 +267,7 @@ Every pull request and commit is validated against comprehensive backend and fro
 
 ### 1. Pytest Suite (59/59 Passing)
 ```powershell
-python -m pytest praman-api/tests/ -v
+python -m pytest backend/tests/ -v
 ```
 - **AST SQL Guardrails (`test_duckdb_plane.py`)**: Interception of `SUM(running_balance)`, `SUM(COALESCE(...))`, and aliased CTE variations.
 - **Indic Financial UDFs (`test_udfs.py`)**: Precision checks on `extract_utr`, `norm_indic_vendor`, `jw_sim`, and GSTIN checksum verification.
@@ -277,7 +277,7 @@ python -m pytest praman-api/tests/ -v
 
 ### 2. Frontend Type & Build Verification
 ```powershell
-cd praman-ui
+cd frontend
 npm run build
 ```
 - Verified with `tsc && vite build` (0 TypeScript errors, 0 lint warnings).
@@ -292,17 +292,13 @@ Praman-AI/
 ├── start.sh                           # 1-Click Startup for macOS / Linux / WSL
 ├── start.ps1                          # 1-Click Startup for Windows PowerShell
 ├── vercel.json                        # Vercel Multi-Service Deployment Config
+├── netlify.toml                       # Netlify Deployment Config
 ├── .env.example                       # Documented Keyless Configuration
-├── praman-data/                       # 10,040 Synthetic Relational Rows & DuckDB
-│   ├── generator.py                   # Deterministic generator (seed=42)
-│   ├── patch_scenarios.py             # Scenario invariants & edge cases
-│   ├── seed_duckdb.py                 # DuckDB physical loader
-│   ├── praman.duckdb                  # Embedded DuckDB database
-│   └── raw_csvs/                      # 6 Source CSV files
-├── praman-api/                        # FastAPI Backend & Neuro-Symbolic Engine
+├── backend/                           # FastAPI Backend & Neuro-Symbolic Engine
 │   ├── pyproject.toml
 │   ├── requirements.txt
 │   ├── tests/                         # 59 Unit & Integration Tests
+│   ├── praman-data/                   # 10,040 Synthetic Relational Rows & DuckDB
 │   └── src/praman_api/
 │       ├── main.py                    # FastAPI application initialization
 │       ├── config.py                  # Pydantic settings & path resolution
@@ -319,7 +315,7 @@ Praman-AI/
 │       │   └── citations.py           # Evidence citation tracker
 │       └── adapters/
 │           └── public_apis.py         # 4 Keyless Public API adapters
-└── praman-ui/                         # Vite + React 18 Frontend
+└── frontend/                          # Vite + React 18 Frontend
     ├── package.json
     ├── vite.config.ts
     └── src/

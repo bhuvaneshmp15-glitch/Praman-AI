@@ -3,8 +3,8 @@ import { HealthResponse, DiscrepancyCase, CitationDetailResponse, ApprovalRespon
 declare const process: any;
 
 export const API_BASE: string =
-  typeof process !== 'undefined' && process?.env?.PRAMAN_API_URL
-    ? `${String(process.env.PRAMAN_API_URL).replace(/\/$/, '')}/api`
+  typeof process !== 'undefined' && (process?.env?.BACKEND_URL || process?.env?.PRAMAN_API_URL)
+    ? `${String(process.env.BACKEND_URL || process.env.PRAMAN_API_URL).replace(/\/$/, '')}/api`
     : (typeof (import.meta as any)?.env?.VITE_API_BASE_URL === 'string'
         ? (import.meta as any).env.VITE_API_BASE_URL
         : '/api');

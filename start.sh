@@ -23,29 +23,27 @@ if ! command -v python3 &> /dev/null; then
 fi
 
 # 2. Check and seed DuckDB / raw synthetic financial datasets if missing
-if [ ! -f "praman-data/praman.duckdb" ] || [ ! -f "praman-data/raw_csvs/bank_statement.csv" ]; then
+if [ ! -f "backend/praman-data/praman.duckdb" ] || [ ! -f "backend/praman-data/raw_csvs/bank_statement.csv" ]; then
     echo "[1/3] Generating 10,040+ realistic noisy Indian financial rows & injecting scenarios..."
-    $PYTHON_CMD praman-data/generator.py
-    $PYTHON_CMD praman-data/patch_scenarios.py
-    $PYTHON_CMD praman-data/seed_duckdb.py
+    (cd backend && $PYTHON_CMD praman-data/generator.py && $PYTHON_CMD praman-data/patch_scenarios.py && $PYTHON_CMD praman-data/seed_duckdb.py)
 else
     echo "[1/3] DuckDB analytical store (praman.duckdb) and 10,040+ CSV rows verified."
 fi
 
 # 3. Check and install frontend packages if node_modules is missing
-if [ ! -d "praman-ui/node_modules" ]; then
-    echo "[*] Installing frontend dependencies in praman-ui..."
-    (cd praman-ui && npm install)
+if [ ! -d "frontend/node_modules" ]; then
+    echo "[*] Installing frontend dependencies in frontend..."
+    (cd frontend && npm install)
 fi
 
 echo ""
 echo "[2/3] Starting FastAPI Backend with DuckDB Semantic Plane on http://127.0.0.1:8000 ..."
-export PYTHONPATH="$(pwd)/praman-api/src"
-$PYTHON_CMD -m uvicorn praman_api.main:app --host 127.0.0.1 --port 8000 &
+export PYTHONPATH="$(pwd)/backend/src"
+(cd backend && $PYTHON_CMD -m uvicorn praman_api.main:app --host 127.0.0.1 --port 8000) &
 API_PID=$!
 
 echo "[3/3] Starting Vite Frontend on http://127.0.0.1:5173 ..."
-(cd praman-ui && npm run dev -- --port 5173 --host 127.0.0.1) &
+(cd frontend && npm run dev -- --port 5173 --host 127.0.0.1) &
 UI_PID=$!
 
 # Trap Ctrl+C to cleanly kill both processes
