@@ -139,7 +139,7 @@ def ai_extract_intake(raw_text: str, timeout_sec: float = 2.5) -> Dict[str, Any]
         "extracted": {
             "utr": local_parsed.get("utr"),
             "amount": local_parsed.get("amount"),
-            "sender_or_vendor": local_parsed.get("vendor_query"),
+            "sender_or_vendor": local_parsed.get("claimed_vendor") or (local_parsed.get("vendor_query") if local_parsed.get("vendor_query") else None),
             "invoice_id": local_parsed.get("invoice_id"),
             "intent": local_parsed.get("intent", "GENERAL_AUDIT")
         },
@@ -186,6 +186,14 @@ def ai_synthesize_memo(context: Dict[str, Any], timeout_sec: float = 2.5) -> Dic
             allowed_numbers.append(float(context["itc_amount"]))
         except Exception:
             pass
+    vsum = context.get("vendor_summary") or {}
+    if vsum:
+        for vk in ("total_open_amount", "itc_at_risk"):
+            if vsum.get(vk) is not None:
+                try:
+                    allowed_numbers.append(float(vsum[vk]))
+                except Exception:
+                    pass
     for k in [
         "current_bank_balance",
         "upcoming_30d_critical_emi",
@@ -294,6 +302,73 @@ def _build_deterministic_memo(context: Dict[str, Any]) -> str:
     amt_held = float(context.get("amount_held") or 0.0)
     total_amt = float(context.get("amount") or 0.0)
 
+    if decision == "VENDOR_RISK_SUMMARY":
+        vendor_data = context.get("vendor_summary", {})
+        open_inv_cnt = vendor_data.get("open_invoice_count", 0)
+        unfiled_cnt = vendor_data.get("unfiled_gstr2b_count", 0)
+        open_amt = float(vendor_data.get("total_open_amount") or 0.0)
+        itc_risk = float(vendor_data.get("itc_at_risk") or 0.0)
+        compliance_line = (
+            f"Warning: {unfiled_cnt} invoice(s) have unfiled GSTR-2B status, representing ₹{itc_risk:,.2f} in blocked ITC."
+            if unfiled_cnt > 0 else "All invoices for this vendor show compliant tax filing status."
+        )
+        return f"""### Executive Audit Memorandum: Vendor Due Diligence Exposure Summary (`{case_id}`)
+
+#### 1. Counterparty Exposure & Master Compliance
+Comprehensive vendor due diligence completed for **{entity}** [CIT-1].
+- **Vendor Master**: Matched registered vendor in Tally ERP.
+- **Total Open Invoices Pending Approval**: **{open_inv_cnt}** invoice(s) totaling **₹{open_amt:,.2f}**
+- **Unfiled GSTR-2B Tax Filings**: **{unfiled_cnt}** filing(s)
+- **Input Tax Credit (ITC) at Risk**: **₹{itc_risk:,.2f}** under CGST Section 16(2)(aa)
+
+#### 2. Risk & Working Capital Assessment
+This is a read-only vendor exposure inquiry. No disbursement has been initiated.
+{compliance_line}
+
+#### 3. Recommended Accounts Payable Actions
+1. **Pre-Disbursement Audit**: Ensure all unfiled GSTR-2B invoices have tax portions withheld before releasing payment.
+2. **Supplier Communication**: Remind vendor Accounts Receivable team to upload GSTR-1 returns prior to the statutory cut-off.
+"""
+
+    if decision == "VENDOR_NOT_FOUND":
+        return f"""### Executive Audit Memorandum: Vendor Master Not Found (`{case_id}`)
+
+#### 1. Master Ledger Search Finding
+Due diligence inquiry initiated for vendor: **"{entity}"**.
+Cross-table lookup executed across Tally ERP vendor masters and GSTR-2B supplier registry.
+
+- **Status**: **0 vendor records found** in ERP or tax filings.
+- **Finding**: Vendor '{entity}' not found in Tally ERP or GSTR-2B master. Verify GSTIN registration and onboard vendor master before creating a purchase order.
+
+#### 2. Commercial & Statutory Compliance Guidance
+Under standard internal accounting controls, disbursements or purchase orders cannot be created for un-onboarded entities.
+- **Statutory Risk**: Making payments without verified GSTIN / PAN registration exposes the enterprise to Section 16(2)(aa) blocked ITC and potential GST reverse charge liability.
+
+#### 3. Prescribed Onboarding Workflow
+1. **Request Vendor Master Documents**: Obtain Certificate of Incorporation, PAN card, and GSTIN registration certificate.
+2. **Verify GSTIN Live**: Check GSTIN active status on official GST portal.
+3. **Complete ERP Onboarding**: Complete vendor master KYC before issuing Purchase Orders or processing invoices.
+"""
+
+    if decision == "NODAL_BATCH_SETTLEMENT":
+        batch_amt = float(context.get("amount") or 0.0)
+        return f"""### Executive Audit Memorandum: Nodal Batch Settlement Alert (`{case_id}`)
+
+#### 1. Banking Settlement Analysis
+Audit executed for transaction reference **{ref_id}** [CIT-1].
+- **Audit Finding**: {summary_text}
+- **Matched Bank Credit**: **₹{batch_amt:,.2f}**
+- **Classification**: Razorpay Nodal Gateway Aggregated Settlement Batch
+
+#### 2. Customer Order Reconciliation Warning
+The matched bank credit of ₹{batch_amt:,.2f} is an aggregated payment gateway payout batch encompassing multiple underlying customer transactions. It does NOT constitute proof of an individual customer payment.
+- **Risk**: Marking an order as fulfilled or paid based solely on a batch nodal settlement risks misattributing settlement funds to an unpaid order.
+
+#### 3. Prescribed Actions
+1. **Verify Individual Customer RRN**: Look up the specific customer UPI RRN in the Razorpay Merchant Dashboard.
+2. **Reconcile Batch Settlement Summary**: Verify individual order itemization against the gateway settlement batch statement before marking order paid.
+"""
+
     if decision == "NOT_FOUND_IN_STATEMENT":
         return f"""### Executive Audit Memorandum: Record Not Found (`{case_id}`)
 
@@ -382,6 +457,12 @@ The counterparty claiming payout does not match the legal entity on the register
 """
 
     if decision == "NO_DISCREPANCY_FOUND":
+        checked_list = (context.get("verification_checklist") or {}).get("checked", [])
+        pending_list = (context.get("verification_checklist") or {}).get("pending_human_signoff", [])
+
+        checked_lines = "\n".join([f"  - [x] {item}" for item in checked_list]) if checked_list else "  - None verified"
+        pending_lines = "\n".join([f"  - [ ] {item}" for item in pending_list]) if pending_list else "  - None pending"
+
         return f"""### Executive Audit Memorandum: No Discrepancy Found (`{case_id}`)
 
 #### 1. Reconciliation Findings
@@ -389,18 +470,13 @@ The counterparty claiming payout does not match the legal entity on the register
 - **Reference Identifier**: `{ref_id}`
 - **Transaction Amount**: ₹{total_amt:,.2f}
 - **Hold Amount Required**: ₹0.00 (Zero hold enforced)
-- **Filing & Settlement Status**: Reconciled across ledger, GSTR-2B tax portal, and bank clearing statements.
+- **Filing & Settlement Status**: Reconciled across verified ledger, tax, and clearing records.
 
 #### 2. Verification Checklist
 - **Automated Verification**:
-  - [x] Bank statement settlement & narration verified
-  - [x] Razorpay UPI RRN & transaction status confirmed
-  - [x] Tally invoice total matches supporting tax records
-  - [x] GSTR-2B supplier filing status confirmed `FILED`
+{checked_lines}
 - **Pending Human Sign-off**:
-  - [ ] Duplicate invoice check across prior financial years
-  - [ ] Beneficiary bank account ownership verification
-  - [ ] Physical goods delivery (GRN) or service acceptance
+{pending_lines}
 
 #### 3. Prescribed Actions
 1. **Release Payment**: Proceed with payout of ₹{total_amt:,.2f} to `{entity}`.

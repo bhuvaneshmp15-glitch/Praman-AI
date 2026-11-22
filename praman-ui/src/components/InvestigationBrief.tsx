@@ -145,6 +145,21 @@ export const InvestigationBrief: React.FC<InvestigationBriefProps> = ({
               <AlertTriangle className="w-4 h-4 text-amber-600" />
               VENDOR MISMATCH
             </span>
+          ) : decision === 'VENDOR_RISK_SUMMARY' ? (
+            <span className="px-3 py-1.5 rounded-full bg-blue-100 text-blue-900 border border-blue-300 font-sans text-xs font-bold flex items-center gap-1.5 shadow-xs">
+              <Building className="w-4 h-4 text-blue-600" />
+              VENDOR RISK SUMMARY (READ-ONLY)
+            </span>
+          ) : decision === 'VENDOR_NOT_FOUND' ? (
+            <span className="px-3 py-1.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-sans text-xs font-bold flex items-center gap-1.5 shadow-xs">
+              <AlertTriangle className="w-4 h-4 text-amber-600" />
+              VENDOR NOT FOUND (ONBOARDING REQUIRED)
+            </span>
+          ) : decision === 'NODAL_BATCH_SETTLEMENT' ? (
+            <span className="px-3 py-1.5 rounded-full bg-purple-100 text-purple-900 border border-purple-300 font-sans text-xs font-bold flex items-center gap-1.5 shadow-xs">
+              <AlertOctagon className="w-4 h-4 text-purple-600" />
+              NODAL BATCH SETTLEMENT
+            </span>
           ) : decision === 'INCONCLUSIVE_MANUAL_REVIEW' ? (
             <span className="px-3 py-1.5 rounded-full bg-stone-100 text-stone-800 border border-stone-300 font-sans text-xs font-bold flex items-center gap-1.5 shadow-xs">
               <HelpCircle className="w-4 h-4 text-stone-600" />
@@ -335,7 +350,11 @@ export const InvestigationBrief: React.FC<InvestigationBriefProps> = ({
                   className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-sans text-xs font-bold shadow-md transition-all cursor-pointer hover:shadow-lg active:scale-98"
                 >
                   <Send className="w-4 h-4" />
-                  <span>Approve &amp; Execute Resolution</span>
+                  <span>
+                    {brief.actions.some((a) => a.action === 'MARK_ORDER_PAID')
+                      ? 'Mark Order Paid'
+                      : 'Approve & Execute Resolution'}
+                  </span>
                   <ArrowRight className="w-4 h-4 ml-1 opacity-70" />
                 </button>
               )}

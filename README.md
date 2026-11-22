@@ -6,9 +6,9 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![DuckDB](https://img.shields.io/badge/DuckDB-1.1.0-FFF000.svg?style=flat&logo=duckdb&logoColor=black)](https://duckdb.org)
 [![Vite + React](https://img.shields.io/badge/Frontend-React_18_+_Vite-61DAFB.svg?style=flat&logo=react&logoColor=black)](https://vitejs.dev)
-[![Tests](https://img.shields.io/badge/Tests-Passed%20(100%25)-success.svg)](https://pytest.org)
-[![Offline-Ready](https://img.shields.io/badge/Execution-Offline--Ready%20%C2%B7%20Optional%20LLM%20Key-brightgreen.svg)](#-live-keyless-public-apis)
-[![Live Sandbox](https://img.shields.io/badge/Sandbox-Live%20Unscripted%20Intake-blue.svg)](#-interactive-judge-testing--unscripted-sandbox)
+[![Tests](https://img.shields.io/badge/Pytest-57%20Passed%20(100%25)-success.svg)](https://pytest.org)
+[![Offline-First](https://img.shields.io/badge/Engine-Offline--First%20%C2%B7%20Optional%20LLM%20Key-brightgreen.svg)](#-live-keyless-public-apis)
+[![Live Sandbox](https://img.shields.io/badge/Sandbox-Live%20Unscripted%20Intake%20%2B%20CSV%20Upload-blue.svg)](#-interactive-judge-testing--unscripted-sandbox)
 
 ---
 
@@ -85,7 +85,7 @@ Standard enterprise solutions fail Indian finance teams because:
 | **Bank Balance Math** | Attempts `SUM(running_balance)`, resulting in astronomical false cash figures. | DuckDB plane raises `SqlSemanticError`; forces query into window CTE `ORDER BY txn_date DESC, row_id DESC LIMIT 1`. |
 | **Cashflow Protection** | Hallucinates post-payout runway math; claims ₹18,450 cash buffer is "safe". | Deterministic Python calculator enforces liquidity thresholds, proving debt service ratio drops from 2.84x to 1.17x. |
 | **PII & Privacy** | Sends raw vendor names, VPAs, and UTRs to public endpoints. | **Local regex PII redaction** tokenizes UTRs, VPAs, and bank accounts before any external dispatch. |
-| **API Costs & Rate Limits** | Requires expensive LLM tokens; frequently crashes with `429 Too Many Requests`. | **ZERO API keys required** in `.env`. Operates with keyless public APIs and local deterministic symbolic planning. |
+| **API Costs & Rate Limits** | Requires expensive LLM tokens; frequently crashes with `429 Too Many Requests`. | **Offline-First Deterministic Engine** · Operates completely offline with zero mandatory API keys; supports optional LLM keys (Groq, OpenRouter, OpenAI, Gemini) when configured. |
 
 ---
 
@@ -200,15 +200,16 @@ Praman integrates 4 public endpoints (`Auth: None`) with 3.0s timeouts and deter
 
 ---
 
-## 🎯 Unscripted Custom Case & "Paste Unseen Input" Sandbox
+## 🎯 Unscripted Custom Case & Live Statement Upload Sandbox
 
-Judges and evaluators can execute completely unscripted investigations on unseen, real-world data directly in the UI or via API:
+Judges and evaluators can execute completely unscripted investigations on custom narrations against the sample ledger + upload live arbitrary CSV bank statements:
 
 ### 1. Interactive Sandbox in UI:
-Located at the top of the workspace with 3 instant 1-click test buttons:
+Located at the top of the workspace with 3 instant 1-click test buttons and a **Live CSV Statement Upload** handler:
 - **Sample 1: Real Ledger UTR (`432910485799`)**: Reconciles clean settlement with Ganpati Trading Co $\rightarrow$ yields `NO_DISCREPANCY_FOUND` and displays the **Verification Checklist**.
-- **Sample 2: Amount Mismatch SMS (`Dear SBI User, your A/c XX4892 debited by Rs 18,400...`)**: Detects variance against ledger invoice ₹1,84,000.00 $\rightarrow$ yields `AMOUNT_MISMATCH` with exact ₹1,65,600.00 variance hold.
+- **Sample 2: Amount Mismatch SMS (`Dear SBI User, your A/c XX4892 debited by Rs 18,400...`)**: Detects variance against ledger debit ₹88,452.76 $\rightarrow$ yields `AMOUNT_MISMATCH` with exact delta hold.
 - **Sample 3: Unrecorded UTR (`999999999999`)**: Missing from bank statement $\rightarrow$ yields `NOT_FOUND_IN_STATEMENT` with safe guidance protocol.
+- **Upload Judge CSV Button**: Upload any arbitrary 4-column CSV (`txn_date`, `narration`, `withdrawal`, `deposit`) to perform instant, vectorized multi-way reconciliation against 1,800 Tally invoices and 1,700 GSTR-2B filings in DuckDB.
 
 ### 2. Evidence-Grounded Branching & Verdict Hierarchy:
 - **0 rows matched (e.g. fake UTR `999999999999`):** Verdict `NOT_FOUND_IN_STATEMENT` with zero fabricated citations.
@@ -223,6 +224,7 @@ Located at the top of the workspace with 3 instant 1-click test buttons:
 ### 3. Live Endpoints:
 - `POST /api/cases/custom`: Accepts `{"query": str, "raw_narration": str | None}` for unscripted investigations.
 - `POST /api/tools/test-narration`: Instant ad-hoc parser testing `extract_utr`, `norm_indic_vendor`, and `jw_sim` against any raw string.
+- `POST /api/tools/upload-statement`: Accepts arbitrary CSV bank statements and performs vectorized 3-way matching in DuckDB.
 
 ---
 
@@ -247,13 +249,15 @@ The script automatically verifies/generates the 10,040 rows in `praman-data/`, s
 
 ## 🧪 Comprehensive Verification Suite
 
-Run the full pytest suite (all 35 tests pass with zero `.env` keys required):
+Run the full pytest suite (all 57 checks pass cleanly offline with zero `.env` keys required):
 
 ```powershell
 python -m pytest praman-api/tests/ -v
 ```
 
 ```
+praman-api/tests/test_agent_engine.py::test_ai_extract_intake PASSED
+praman-api/tests/test_agent_engine.py::test_ai_synthesize_memo PASSED
 praman-api/tests/test_agent_engine.py::test_pii_redaction PASSED
 praman-api/tests/test_agent_engine.py::test_intent_parsing PASSED
 praman-api/tests/test_agent_engine.py::test_cashflow_math_case_gst_104 PASSED
@@ -265,6 +269,22 @@ praman-api/tests/test_agent_engine.py::test_investigation_stream_case_upi_209 PA
 praman-api/tests/test_agent_engine.py::test_investigation_stream_case_sla_302 PASSED
 praman-api/tests/test_agent_engine.py::test_investigation_stream_custom_case_not_found PASSED
 praman-api/tests/test_agent_engine.py::test_investigation_stream_custom_case_verified_safe_to_pay PASSED
+praman-api/tests/test_agent_engine.py::test_amount_regex_precision PASSED
+praman-api/tests/test_agent_engine.py::test_parameterized_sql_with_apostrophes PASSED
+praman-api/tests/test_agent_engine.py::test_evidence_comparison_amount_mismatch PASSED
+praman-api/tests/test_agent_engine.py::test_evidence_comparison_direction_mismatch PASSED
+praman-api/tests/test_agent_engine.py::test_evidence_comparison_gateway_blocked PASSED
+praman-api/tests/test_agent_engine.py::test_scenario_type_routing_no_substring PASSED
+praman-api/tests/test_agent_engine.py::test_verify_memo_numbers_guardrail PASSED
+praman-api/tests/test_agent_engine.py::test_universal_vendor_gate_mismatch PASSED
+praman-api/tests/test_agent_engine.py::test_utr_amount_mismatch_sample_2_sms PASSED
+praman-api/tests/test_agent_engine.py::test_utr_direction_mismatch_inbound_vs_debit PASSED
+praman-api/tests/test_agent_engine.py::test_vendor_due_diligence_summary PASSED
+praman-api/tests/test_agent_engine.py::test_vendor_due_diligence_not_found PASSED
+praman-api/tests/test_agent_engine.py::test_nodal_batch_settlement_warning PASSED
+praman-api/tests/test_agent_engine.py::test_customer_payment_mark_order_paid_cta PASSED
+praman-api/tests/test_agent_engine.py::test_all_153_vendors_no_fanout_crash PASSED
+praman-api/tests/test_agent_engine.py::test_memo_checklist_parity PASSED
 praman-api/tests/test_api_endpoints.py::test_api_health PASSED
 praman-api/tests/test_api_endpoints.py::test_list_cases PASSED
 praman-api/tests/test_api_endpoints.py::test_trigger_case PASSED
@@ -273,6 +293,10 @@ praman-api/tests/test_api_endpoints.py::test_get_citation_detail PASSED
 praman-api/tests/test_api_endpoints.py::test_approve_case_action PASSED
 praman-api/tests/test_api_endpoints.py::test_create_custom_case_and_stream PASSED
 praman-api/tests/test_api_endpoints.py::test_narration_tester_tool PASSED
+praman-api/tests/test_api_endpoints.py::test_upload_statement_csv PASSED
+praman-api/tests/test_api_endpoints.py::test_upload_statement_amount_mismatch PASSED
+praman-api/tests/test_api_endpoints.py::test_upload_statement_direction_mismatch PASSED
+praman-api/tests/test_api_endpoints.py::test_upload_statement_1000_rows_under_3_seconds PASSED
 praman-api/tests/test_duckdb_plane.py::test_guardrail_sum_running_balance PASSED
 praman-api/tests/test_duckdb_plane.py::test_guardrail_cartesian_fanout_threshold PASSED
 praman-api/tests/test_duckdb_plane.py::test_guardrail_mutation_prevention PASSED
@@ -290,8 +314,9 @@ praman-api/tests/test_udfs.py::test_norm_indic_vendor PASSED
 praman-api/tests/test_udfs.py::test_jw_sim PASSED
 praman-api/tests/test_udfs.py::test_validate_gstin_checksum PASSED
 
-====================== 35 passed in 64.35s ======================
+====================== 57 passed in 3.18s ======================
 ```
+
 
 ---
 
@@ -313,7 +338,7 @@ Praman-AI/
 ├── praman-api/                        # FastAPI Backend & Neuro-Symbolic Agent Engine
 │   ├── pyproject.toml
 │   ├── requirements.txt
-│   ├── tests/                         # 35 Pytest unit & integration tests
+│   ├── tests/                         # 57 Pytest unit & integration tests
 │   │   ├── test_udfs.py
 │   │   ├── test_duckdb_plane.py
 │   │   ├── test_agent_engine.py
@@ -372,10 +397,10 @@ Praman-AI/
 - [x] **Anti-Hallucination Guardrails**: Prohibits `SUM(running_balance)` and Cartesian joins $< 0.90$.
 - [x] **Deterministic SQL Guardrails**: Naive fuzzy attempt intercepted $\rightarrow$ auto-healed into defensive CTE with window ranking.
 - [x] **Zero Mental Arithmetic**: Deterministic Python calculator enforces exact rupee liquidity math (1.17x risk vs. 1.42x protected).
-- [x] **Zero Mandatory Keys & Local PII Protection**: Seamlessly runs with 4 keyless public APIs (`Auth: None`), local regex PII redaction, and local deterministic symbolic planning.
-- [x] **Evidence-Grounded Custom Cases**: Data-driven verdict branching (`NOT_FOUND_IN_LEDGER`, `VERIFIED_SAFE_TO_PAY`, `HOLD_DISPUTED_PORTION`) with zero fabricated citations.
+- [x] **Offline-First Deterministic Engine & Optional LLM Integration**: 100% of SQL execution, entity matching, and verdict classification runs offline and deterministically without external API dependencies. Optional LLM integration (Groq / OpenRouter / OpenAI / Gemini) powers unstructured intake extraction and memo drafting with local PII redaction.
+- [x] **Evidence-Grounded Custom Cases & Statement Upload**: Data-driven verdict branching (`NOT_FOUND_IN_LEDGER`, `VERIFIED_SAFE_TO_PAY`, `HOLD_DISPUTED_PORTION`, `VENDOR_MISMATCH`) with zero fabricated citations. Live CSV upload parses arbitrary judge bank statements directly into DuckDB with 3-way reconciliation.
 - [x] **Editorial Financial Dossier UI**: Warm paper aesthetic, deep obsidian SQL feed, Recharts runway chart, and interactive human approval cinematic.
-- [x] **100% Test Pass Rate**: 35 automated test cases passing cleanly.
+- [x] **100% Test Pass Rate**: 57 automated test cases passing cleanly across UDFs, guardrails, math, endpoints, statement upload, and all 153 vendor queries.
 
 ---
 *Developed with precision for Arthaton 2026.*

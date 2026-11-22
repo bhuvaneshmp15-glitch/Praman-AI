@@ -91,3 +91,15 @@ class TestNarrationResponse(BaseModel):
     matched_bank_rows: List[Dict[str, Any]]
     latency_ms: float
 
+
+class StatementUploadResponse(BaseModel):
+    filename: str
+    total_rows: int
+    reconciled_count: int
+    unreconciled_count: int
+    matched_records: List[Dict[str, Any]]
+    unmatched_records: List[Dict[str, Any]]
+    truncated_fuzzy_count: int = 0
+    summary: str
+    latency_ms: float
+

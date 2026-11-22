@@ -69,6 +69,7 @@ def norm_indic_vendor(name: str) -> str:
     return " ".join(expanded).strip()
 
 
+@functools.lru_cache(maxsize=32768)
 def jw_sim(s1: str, s2: str) -> float:
     """Computes Jaro-Winkler similarity (0.0 to 1.0) on norm_indic_vendor(s1) and norm_indic_vendor(s2).
     

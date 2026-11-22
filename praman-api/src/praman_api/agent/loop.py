@@ -713,10 +713,64 @@ Approving this payout would have caused an unrecoverable **₹1,25,000.00 duplic
         # 3. Evidence-Grounded Branching
         row_count = sql_res.get("row_count", 0)
 
+        # Extract parsed intent fields
+        parsed_intent = plan_result.get("parsed_intent") or parse_investigation_intent(query_text, narration_text)
+        intent_type = parsed_intent.get("intent")
+        claimed_vendor = parsed_intent.get("claimed_vendor")
+        if not claimed_vendor and extracted_data:
+            cand_vendor = extracted_data.get("sender_or_vendor")
+            if cand_vendor and len(cand_vendor) > 2 and cand_vendor.lower() not in ("customer", "customer payment", "customer paid us", "inbound", "payment", "invoice", "debit", "credit"):
+                claimed_vendor = cand_vendor
+        if claimed_vendor and any(claimed_vendor.upper().startswith(p) for p in ("INV-", "REC-", "PAY_")):
+            claimed_vendor = None
+        if claimed_vendor and any(term in claimed_vendor.lower() for term in ("customer paid", "customer payment", "paid us", "inbound", "deposit received")):
+            claimed_vendor = None
+
         # -----------------------------------------------------------------
-        # BRANCH A: 0 rows matched (Record not found in statement)
+        # BRANCH A: 0 rows matched (Record not found in statement / master)
         # -----------------------------------------------------------------
         if row_count == 0:
+            if intent_type == "VENDOR_DUE_DILIGENCE":
+                vendor_target = claimed_vendor or query_text
+                memo_ctx = {
+                    "case_id": case_id,
+                    "entity": vendor_target,
+                    "decision": "VENDOR_NOT_FOUND",
+                    "ref_id": vendor_target,
+                    "summary_text": query_text,
+                    "latest_statement_date": stmt_date
+                }
+                yield {
+                    "type": "action",
+                    "tool": "ai_synthesize_memo",
+                    "args": {"case_id": case_id, "decision": "VENDOR_NOT_FOUND"}
+                }
+                memo_res = ai_synthesize_memo(memo_ctx)
+                yield {
+                    "type": "observation",
+                    "tool": "ai_synthesize_memo",
+                    "result": {"status": "synthesized", "provider": memo_res["provider"], "latency_ms": memo_res["latency_ms"]}
+                }
+                v_checklist = {
+                    "checked": [
+                        f"Tally ERP Vendor Master Search (0 records for '{vendor_target}')",
+                        "GSTR-2B Supplier Registry Search (0 records)"
+                    ],
+                    "pending_human_signoff": [
+                        "Verify vendor GSTIN on official GST portal",
+                        "Complete vendor KYC and master onboarding before issuing Purchase Order"
+                    ]
+                }
+                verdict = conclude_brief(
+                    headline=f"Vendor Not Found: {vendor_target} ({case_id})",
+                    decision="VENDOR_NOT_FOUND",
+                    markdown_brief=memo_res["memo"],
+                    actions=[],
+                    verification_checklist=v_checklist
+                )
+                yield {"type": "verdict", "data": verdict}
+                return
+
             guidance_msg = f"Not found in the statement as of {stmt_date}. Ask the counterparty for the 12-digit UTR / bank advice proof and recheck after the next NEFT/UPI settlement cycle."
 
             # AI JOB 2: Synthesize plain-language memo
@@ -766,14 +820,83 @@ Approving this payout would have caused an unrecoverable **₹1,25,000.00 duplic
             return
 
         # -----------------------------------------------------------------
+        # BRANCH B: Dedicated Vendor Due Diligence Inquiry (>0 rows)
+        # -----------------------------------------------------------------
+        col_names = sql_res.get("columns", [])
+        if intent_type == "VENDOR_DUE_DILIGENCE":
+            open_invoices = [r for r in sql_res["rows"] if dict(zip(col_names, r)).get("payout_status") == "PENDING_APPROVAL"]
+            open_invoice_count = len(open_invoices)
+            unfiled_gstr2b_rows = [r for r in sql_res["rows"] if dict(zip(col_names, r)).get("gstr2b_filing_status") == "NOT_FILED"]
+            unfiled_gstr2b_count = len(unfiled_gstr2b_rows)
+            total_open_amount = sum(float(dict(zip(col_names, r)).get("total_amount") or 0.0) for r in open_invoices)
+            itc_at_risk = sum(float(dict(zip(col_names, r)).get("igst_amount") or 0.0) for r in unfiled_gstr2b_rows)
+            matched_vendor_name = str(dict(zip(col_names, sql_res["rows"][0])).get("vendor_name"))
+
+            cit1 = record_finding(
+                title=f"Vendor Due Diligence Exposure Profile ({matched_vendor_name})",
+                detail=f"Analyzed {row_count} historical invoices. Found {open_invoice_count} open invoice(s) totaling ₹{total_open_amount:,.2f} with {unfiled_gstr2b_count} unfiled GSTR-2B filing(s) (₹{itc_at_risk:,.2f} ITC at risk).",
+                citation_id="CIT-1",
+                source_table="tally_invoices",
+                row_id=matched_vendor_name
+            )
+            yield {"type": "finding", "data": cit1}
+
+            v_summary = {
+                "open_invoice_count": open_invoice_count,
+                "unfiled_gstr2b_count": unfiled_gstr2b_count,
+                "total_open_amount": total_open_amount,
+                "itc_at_risk": itc_at_risk
+            }
+            memo_ctx = {
+                "case_id": case_id,
+                "entity": matched_vendor_name,
+                "decision": "VENDOR_RISK_SUMMARY",
+                "ref_id": matched_vendor_name,
+                "vendor_summary": v_summary,
+                "summary_text": query_text
+            }
+            yield {
+                "type": "action",
+                "tool": "ai_synthesize_memo",
+                "args": {"case_id": case_id, "decision": "VENDOR_RISK_SUMMARY"}
+            }
+            memo_res = ai_synthesize_memo(memo_ctx)
+            yield {
+                "type": "observation",
+                "tool": "ai_synthesize_memo",
+                "result": {"status": "synthesized", "provider": memo_res["provider"], "latency_ms": memo_res["latency_ms"]}
+            }
+
+            v_checklist = {
+                "checked": [
+                    f"Vendor Master Identified: {matched_vendor_name}",
+                    f"Total Invoices Analyzed: {row_count}",
+                    f"Pending Approval Invoices: {open_invoice_count} (₹{total_open_amount:,.2f})",
+                    f"Unfiled GSTR-2B Filings: {unfiled_gstr2b_count} (ITC at Risk: ₹{itc_at_risk:,.2f})"
+                ],
+                "pending_human_signoff": [
+                    "Vendor reconciliation sign-off by Accounts Payable",
+                    "Supplier GSTR-1 compliance certificate verification"
+                ]
+            }
+            verdict = conclude_brief(
+                headline=f"Vendor Exposure Summary: {matched_vendor_name} ({case_id})",
+                decision="VENDOR_RISK_SUMMARY",
+                markdown_brief=memo_res["memo"],
+                actions=[],
+                verification_checklist=v_checklist
+            )
+            yield {"type": "verdict", "data": verdict}
+            return
+
+        # -----------------------------------------------------------------
         # Records were matched! Inspect primary row
         # -----------------------------------------------------------------
         first_row = sql_res["rows"][0]
-        col_names = sql_res.get("columns", [])
         row_dict = dict(zip(col_names, first_row))
 
-        entity_desc = str(row_dict.get("vendor_name") or row_dict.get("narration") or row_dict.get("customer_vpa") or "Matched Record")
-        ref_id = str(row_dict.get("invoice_id") or row_dict.get("payment_id") or row_dict.get("row_id") or "REC-001")
+        entity_desc = str(row_dict.get("vendor_name") or row_dict.get("narration") or row_dict.get("bank_narration") or row_dict.get("customer_vpa") or "Matched Record")
+        ref_id = str(row_dict.get("invoice_id") or row_dict.get("payment_id") or row_dict.get("bank_row") or row_dict.get("row_id") or "REC-001")
         source_tbl = "tally_invoices" if "invoice_id" in row_dict else ("razorpay_upi" if "payment_id" in row_dict else "bank_statement")
 
         # Register genuine CIT-1
@@ -786,20 +909,28 @@ Approving this payout would have caused an unrecoverable **₹1,25,000.00 duplic
         )
         yield {"type": "finding", "data": cit1}
 
-        # Extract parsed intent fields
-        parsed_intent = plan_result.get("parsed_intent") or parse_investigation_intent(query_text, narration_text)
         claimed_amount = parsed_intent.get("amount")
         claimed_direction = parsed_intent.get("direction")
-        intent_type = parsed_intent.get("intent")
-        claimed_vendor = parsed_intent.get("vendor_query") if intent_type in ("VENDOR_LOOKUP", "GENERAL_AUDIT") else None
 
         # Extract matched ledger row fields
         ledger_vendor = str(row_dict.get("vendor_name") or "")
         ledger_withdrawal = float(row_dict.get("withdrawal") or row_dict.get("bank_withdrawal") or 0.0)
         ledger_deposit = float(row_dict.get("deposit") or row_dict.get("bank_deposit") or 0.0)
-        ledger_total = float(row_dict.get("total_amount") or row_dict.get("gross_amount") or 0.0)
-        if ledger_total == 0.0:
-            ledger_total = ledger_withdrawal if ledger_withdrawal > 0 else ledger_deposit
+        
+        invoice_total = float(row_dict.get("total_amount") or 0.0)
+        upi_gross = float(row_dict.get("gross_amount") or 0.0)
+        if invoice_total > 0:
+            ledger_total = invoice_total
+            ledger_amount = invoice_total
+        elif upi_gross > 0:
+            ledger_total = upi_gross
+            ledger_amount = upi_gross
+        else:
+            ledger_amount = ledger_deposit if ledger_deposit > 0 else ledger_withdrawal
+            ledger_total = ledger_amount
+
+        ledger_direction = "CREDIT" if ledger_deposit > 0 else ("DEBIT" if ledger_withdrawal > 0 else None)
+
         upi_status = str(row_dict.get("status") or "").lower()
         filing_status = str(row_dict.get("gstr2b_filing_status") or row_dict.get("filing_status") or "").upper()
         itc_eligible = float(row_dict.get("gstr2b_itc") or row_dict.get("itc_eligible_amount") or 0.0)
@@ -815,8 +946,33 @@ Approving this payout would have caused an unrecoverable **₹1,25,000.00 duplic
         actions: List[Dict[str, Any]] = []
         checklist: Dict[str, List[str]] = {"checked": [], "pending_human_signoff": []}
 
-        # GATE 1: Gateway Status Blocked
-        if upi_status in ("disputed", "refunded", "failed_at_switch", "failed"):
+        # GATE 1: Universal Vendor Identity Gate
+        if claimed_vendor and ledger_vendor and jw_sim(norm_indic_vendor(claimed_vendor), norm_indic_vendor(ledger_vendor)) < 0.90:
+            v_sim = jw_sim(norm_indic_vendor(claimed_vendor), norm_indic_vendor(ledger_vendor))
+            decision = "VENDOR_MISMATCH"
+            hold_val = ledger_total
+            discrepancy_reason = f"Vendor mismatch: invoice {ref_id} belongs to '{ledger_vendor}', not '{claimed_vendor}'"
+            headline = f"Vendor Identity Mismatch: JW Sim {v_sim:.2f} ({case_id})"
+            checklist = {
+                "checked": [
+                    f"Ledger Row Matched: {ref_id}",
+                    f"Claimed Entity: {claimed_vendor}",
+                    f"Ledger Registered Entity: {ledger_vendor}",
+                    f"String Similarity: {v_sim:.2f} (Below 0.90 threshold)"
+                ],
+                "pending_human_signoff": [
+                    "Validate GSTIN and PAN of claiming entity",
+                    "Obtain corporate name change authorization",
+                    "Block disbursement until vendor identity is reconciled"
+                ]
+            }
+            actions = [
+                {"action": "BLOCK_DISBURSEMENT_IDENTITY", "reference_id": ref_id, "amount": hold_val},
+                {"action": "REQUIRE_KYC_VERIFICATION", "entity": claimed_vendor}
+            ]
+
+        # GATE 2: Gateway Status Blocked
+        elif any(term in upi_status for term in ("disputed", "refunded", "failed", "switch_fail", "rejected")):
             decision = "GATEWAY_STATUS_BLOCKED"
             hold_val = ledger_total
             discrepancy_reason = f"UPI switch/gateway status is '{upi_status}' for payment reference {ref_id}. Funds remain stalled at banking node."
@@ -837,11 +993,11 @@ Approving this payout would have caused an unrecoverable **₹1,25,000.00 duplic
                 {"action": "TRANSMIT_NPCI_CLEARING_PROOF", "ref": ref_id}
             ]
 
-        # GATE 2: Cash-Flow Direction Mismatch
-        elif claimed_direction == "INBOUND" and ledger_withdrawal > 0 and ledger_deposit == 0:
+        # GATE 3: Cash-Flow Direction Mismatch
+        elif (claimed_direction in ("INBOUND", "CREDIT") and ledger_direction == "DEBIT") or (claimed_direction == "INBOUND" and ledger_withdrawal > 0 and ledger_deposit == 0):
             decision = "DIRECTION_MISMATCH"
             hold_val = ledger_withdrawal
-            discrepancy_reason = f"Direction mismatch: Claimed inbound credit/deposit, but bank statement records an outgoing withdrawal/debit of ₹{ledger_withdrawal:,.2f}."
+            discrepancy_reason = f"Direction mismatch: claim states inbound customer receipt, but UTR {extracted_utr or ref_id} is an outgoing debit of ₹{ledger_withdrawal:,.2f} to {entity_desc}"
             headline = f"Direction Mismatch: Inbound Claim vs Outbound Debit ({case_id})"
             checklist = {
                 "checked": [
@@ -859,11 +1015,11 @@ Approving this payout would have caused an unrecoverable **₹1,25,000.00 duplic
                 {"action": "DEMAND_CREDIT_ADVICE", "counterparty": entity_desc}
             ]
 
-        elif claimed_direction == "OUTBOUND" and ledger_deposit > 0 and ledger_withdrawal == 0:
+        elif (claimed_direction in ("OUTBOUND", "DEBIT") and ledger_direction == "CREDIT") or (claimed_direction == "OUTBOUND" and ledger_deposit > 0 and ledger_withdrawal == 0):
             decision = "DIRECTION_MISMATCH"
             hold_val = ledger_deposit
-            discrepancy_reason = f"Direction mismatch: Claimed outbound disbursement, but bank statement records an incoming deposit of ₹{ledger_deposit:,.2f}."
-            headline = f"Direction Mismatch: Outbound Claim vs Inbound Deposit ({case_id})"
+            discrepancy_reason = f"Direction mismatch: claim states outbound disbursement, but UTR {extracted_utr or ref_id} is an incoming credit of ₹{ledger_deposit:,.2f} from {entity_desc}"
+            headline = f"Direction Mismatch: Outbound Claim vs Inbound Credit ({case_id})"
             checklist = {
                 "checked": [
                     f"Bank Statement Match Confirmed (Row {ref_id})",
@@ -879,18 +1035,39 @@ Approving this payout would have caused an unrecoverable **₹1,25,000.00 duplic
                 {"action": "HOLD_PAYOUT", "reference_id": ref_id, "amount": hold_val}
             ]
 
-        # GATE 3: Amount Mismatch (Tolerance 0.01)
-        elif claimed_amount is not None and ledger_total > 0 and abs(claimed_amount - ledger_total) > 0.01:
-            delta = abs(claimed_amount - ledger_total)
+        # GATE 4: Razorpay Nodal Batch Settlement Distinction
+        elif (intent_type == "INBOUND_CUSTOMER_PAYMENT" or claimed_direction in ("INBOUND", "CREDIT")) and ledger_deposit > 0 and any(kw in str(row_dict.get("bank_narration") or row_dict.get("narration") or "").upper() for kw in ("RAZORPAY", "NODAL", "SETTLEMENT")) and (claimed_amount is None or abs(claimed_amount - ledger_deposit) > 0.01 or "SETTLEMENT" in str(row_dict.get("bank_narration") or row_dict.get("narration") or "").upper()):
+            decision = "NODAL_BATCH_SETTLEMENT"
+            hold_val = ledger_deposit
+            discrepancy_reason = f"Matched credit ₹{ledger_deposit:,.2f} is a Razorpay nodal settlement batch, not proof of an individual customer payment—verify single customer RRN in Razorpay dashboard before marking order paid."
+            headline = f"Nodal Batch Settlement Alert: ₹{ledger_deposit:,.2f} ({case_id})"
+            checklist = {
+                "checked": [
+                    f"Bank Statement Settlement Credit Matched (Row {ref_id})",
+                    f"Batch Amount: ₹{ledger_deposit:,.2f}",
+                    "Identified as Gateway Nodal Settlement Batch"
+                ],
+                "pending_human_signoff": [
+                    "Verify individual customer RRN in Razorpay merchant dashboard",
+                    "Reconcile order itemization against batch settlement summary"
+                ]
+            }
+            actions = [
+                {"action": "VERIFY_INDIVIDUAL_RRN", "batch_ref": ref_id, "amount": ledger_deposit}
+            ]
+
+        # GATE 5: Amount Mismatch (Tolerance 0.01)
+        elif claimed_amount is not None and ledger_amount > 0 and abs(claimed_amount - ledger_amount) > 0.01:
+            delta = abs(claimed_amount - ledger_amount)
             decision = "AMOUNT_MISMATCH"
             hold_val = delta
-            discrepancy_reason = f"Amount mismatch detected: Claimed ₹{claimed_amount:,.2f}, ledger shows ₹{ledger_total:,.2f} (delta ₹{delta:,.2f})."
-            headline = f"Amount Mismatch: Claimed ₹{claimed_amount:,.2f} vs Ledger ₹{ledger_total:,.2f} ({case_id})"
+            discrepancy_reason = f"Mismatch: claimed ₹{claimed_amount:,.2f}, ledger {ledger_direction.lower() if ledger_direction else 'entry'} shows ₹{ledger_amount:,.2f} ({entity_desc})"
+            headline = f"Amount Mismatch: Claimed ₹{claimed_amount:,.2f} vs Ledger ₹{ledger_amount:,.2f} ({case_id})"
             checklist = {
                 "checked": [
                     f"Matched Ledger Record: {ref_id}",
                     f"Claimed Figure: ₹{claimed_amount:,.2f}",
-                    f"Ledger Recorded Figure: ₹{ledger_total:,.2f}",
+                    f"Ledger Recorded Figure: ₹{ledger_amount:,.2f}",
                     f"Identified Variance Held: ₹{delta:,.2f}"
                 ],
                 "pending_human_signoff": [
@@ -903,31 +1080,7 @@ Approving this payout would have caused an unrecoverable **₹1,25,000.00 duplic
                 {"action": "ISSUE_VARIANCE_NOTICE", "counterparty": entity_desc}
             ]
 
-        # GATE 4: Vendor Identity Mismatch (Jaro-Winkler < 0.90)
-        elif claimed_vendor and ledger_vendor and jw_sim(norm_indic_vendor(claimed_vendor), norm_indic_vendor(ledger_vendor)) < 0.90:
-            v_sim = jw_sim(norm_indic_vendor(claimed_vendor), norm_indic_vendor(ledger_vendor))
-            decision = "VENDOR_MISMATCH"
-            hold_val = ledger_total
-            discrepancy_reason = f"Vendor identity mismatch: Claimed '{claimed_vendor}', ledger matches '{ledger_vendor}' (JW similarity {v_sim:.2f} < 0.90)."
-            headline = f"Vendor Identity Mismatch: JW Sim {v_sim:.2f} ({case_id})"
-            checklist = {
-                "checked": [
-                    f"Ledger Row Matched: {ref_id}",
-                    f"Claimed Entity: {claimed_vendor}",
-                    f"Ledger Entity: {ledger_vendor}",
-                    f"String Similarity: {v_sim:.2f} (Below 0.90 threshold)"
-                ],
-                "pending_human_signoff": [
-                    "Validate GSTIN and PAN of claiming entity",
-                    "Obtain corporate name change authorization"
-                ]
-            }
-            actions = [
-                {"action": "BLOCK_DISBURSEMENT_IDENTITY", "reference_id": ref_id, "amount": hold_val},
-                {"action": "REQUIRE_KYC_VERIFICATION", "entity": claimed_vendor}
-            ]
-
-        # GATE 5: GST / Tax Filing Gate
+        # GATE 6: GST / Tax Filing Gate
         elif filing_status == "NOT_FILED":
             decision = "HOLD_DISPUTED_PORTION"
             hold_val = igst_amt if igst_amt > 0 else round(ledger_total * 0.18 / 1.18, 2)
@@ -949,12 +1102,12 @@ Approving this payout would have caused an unrecoverable **₹1,25,000.00 duplic
                 {"action": "APPROVE_BASE_PAYOUT", "net_amount": round(ledger_total - hold_val, 2)}
             ]
 
-        # GATE 6: Reconciled with Zero Variance
+        # GATE 7: Reconciled with Zero Variance
         elif (
-            (filing_status == "FILED" or ("gstr2b_filing_status" not in row_dict and upi_status in ("captured", "") and ledger_total > 0))
+            (filing_status == "FILED" or ("gstr2b_filing_status" not in row_dict and upi_status in ("captured", "") and ledger_amount > 0))
             and upi_status in ("captured", "")
-            and (claimed_amount is None or abs(claimed_amount - ledger_total) <= 0.01)
-            and (claimed_direction is None or not ((claimed_direction == "INBOUND" and ledger_withdrawal > 0) or (claimed_direction == "OUTBOUND" and ledger_deposit > 0)))
+            and (claimed_amount is None or abs(claimed_amount - ledger_amount) <= 0.01)
+            and (claimed_direction is None or not ((claimed_direction in ("INBOUND", "CREDIT") and ledger_direction == "DEBIT") or (claimed_direction in ("OUTBOUND", "DEBIT") and ledger_direction == "CREDIT")))
             and (not claimed_vendor or not ledger_vendor or jw_sim(norm_indic_vendor(claimed_vendor), norm_indic_vendor(ledger_vendor)) >= 0.90)
         ):
             decision = "NO_DISCREPANCY_FOUND"
@@ -969,28 +1122,61 @@ Approving this payout would have caused an unrecoverable **₹1,25,000.00 duplic
                     row_id=ref_id
                 )
                 yield {"type": "finding", "data": cit2}
-            checklist = {
-                "checked": [
-                    "Bank statement settlement & narration verified",
-                    "Razorpay UPI RRN & transaction status confirmed",
-                    "Tally invoice total matches supporting tax records",
-                    f"GSTR-2B supplier filing status confirmed ({filing_status or 'SETTLED'})"
-                ],
-                "pending_human_signoff": [
-                    "Duplicate invoice check across prior financial years",
-                    "Beneficiary bank account ownership verification",
-                    "Physical goods delivery (GRN) or service acceptance"
-                ]
-            }
-            actions = [
-                {"action": "APPROVE_DISBURSEMENT", "reference_id": ref_id, "amount": ledger_total},
-                {"action": "CLOSE_RECONCILIATION_TICKET", "case_id": case_id}
-            ]
 
-        # GATE 7: Fallback Default: INCONCLUSIVE_MANUAL_REVIEW
+            # DYNAMIC CHECKLIST: strictly reflect matched sources
+            checked_items = []
+            pending_items = []
+
+            has_bank = bool(row_dict.get("bank_row") or (source_tbl == "bank_statement" and row_dict.get("row_id")))
+            if has_bank:
+                checked_items.append("Bank statement settlement & narration verified")
+            else:
+                pending_items.append("Bank statement row reconciliation (Pending statement match)")
+
+            has_upi = bool(row_dict.get("payment_id") or row_dict.get("rrn_utr"))
+            if has_upi:
+                checked_items.append("Razorpay UPI RRN & transaction status confirmed")
+            else:
+                pending_items.append("Razorpay UPI gateway settlement confirmation")
+
+            has_tally = bool(row_dict.get("invoice_id"))
+            if has_tally:
+                checked_items.append("Tally ERP invoice total matched against ledger records")
+            else:
+                pending_items.append("Tally ERP invoice entry verification")
+
+            has_gst = bool(filing_status == "FILED")
+            if has_gst:
+                checked_items.append("GSTR-2B filing status confirmed FILED")
+            else:
+                pending_items.append("GSTR-2B portal filing confirmation under Section 16(2)(aa)")
+
+            pending_items.extend([
+                "Duplicate invoice check across prior financial years",
+                "Beneficiary bank account ownership verification",
+                "Physical goods delivery (GRN) or service acceptance"
+            ])
+
+            checklist = {
+                "checked": checked_items,
+                "pending_human_signoff": pending_items
+            }
+
+            if intent_type == "INBOUND_CUSTOMER_PAYMENT" or claimed_direction in ("INBOUND", "CREDIT"):
+                actions = [
+                    {"action": "MARK_ORDER_PAID", "reference_id": ref_id, "amount": ledger_amount},
+                    {"action": "CLOSE_RECONCILIATION_TICKET", "case_id": case_id}
+                ]
+            else:
+                actions = [
+                    {"action": "APPROVE_DISBURSEMENT", "reference_id": ref_id, "amount": ledger_amount},
+                    {"action": "CLOSE_RECONCILIATION_TICKET", "case_id": case_id}
+                ]
+
+        # GATE 8: Fallback Default: INCONCLUSIVE_MANUAL_REVIEW
         else:
             decision = "INCONCLUSIVE_MANUAL_REVIEW"
-            hold_val = ledger_total
+            hold_val = ledger_amount
             discrepancy_reason = "Evidence matched on ledger but fails strict automated zero-variance reconciliation criteria. Manual sign-off required."
             headline = f"Inconclusive Match: Manual Review Required ({case_id})"
             checklist = {
@@ -1017,7 +1203,8 @@ Approving this payout would have caused an unrecoverable **₹1,25,000.00 duplic
                 "decision": "NO_DISCREPANCY_FOUND",
                 "ref_id": ref_id,
                 "amount": ledger_total,
-                "summary_text": query_text
+                "summary_text": query_text,
+                "verification_checklist": checklist
             }
             yield {
                 "type": "action",
@@ -1089,7 +1276,8 @@ Approving this payout would have caused an unrecoverable **₹1,25,000.00 duplic
             "amount_held": hold_val,
             "disputed_delta": hold_val if decision == "AMOUNT_MISMATCH" else None,
             "summary_text": discrepancy_reason,
-            "cashflow": runway_calc["formatted"]
+            "cashflow": runway_calc["formatted"],
+            "verification_checklist": checklist
         }
         yield {
             "type": "action",

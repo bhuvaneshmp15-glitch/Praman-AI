@@ -363,3 +363,191 @@ def test_verify_memo_numbers_guardrail():
     # Hallucinated memo with invented number
     fake_memo = "The approved payout is ₹99,999.00 with an unverified credit of ₹50,000.00."
     assert verify_memo_numbers(fake_memo, allowed) is False
+
+
+def test_universal_vendor_gate_mismatch():
+    """Verify that universal vendor gate blocks payment when claimed vendor differs from invoice owner."""
+    case_data = {
+        "case_id": "CASE-CUSTOM-VENDOR-MISMATCH",
+        "scenario_type": "CUSTOM_INVESTIGATION",
+        "description": "Release payment for INV-2026-104 to Totally Different Traders",
+        "scenario_metadata": {
+            "custom_query": "Release payment for INV-2026-104 to Totally Different Traders",
+            "raw_narration": "Payment request for INV-2026-104 payee Totally Different Traders"
+        }
+    }
+    events = list(run_investigation_sync("CASE-CUSTOM-VENDOR-MISMATCH", case_data=case_data))
+    verdicts = [e for e in events if e.get("type") == "verdict"]
+    assert len(verdicts) == 1
+    vdata = verdicts[0]["data"]
+    assert vdata["decision"] == "VENDOR_MISMATCH"
+    assert "Vendor Identity Mismatch" in vdata["headline"]
+    assert any(act.get("action") == "BLOCK_DISBURSEMENT_IDENTITY" for act in vdata["actions"])
+
+
+def test_utr_amount_mismatch_sample_2_sms():
+    """Verify Sample 2 SMS matching BNK-3801: claimed ₹18,400 vs ledger debit ₹88,452.76."""
+    case_data = {
+        "case_id": "CASE-CUSTOM-SAMPLE2-SMS",
+        "scenario_type": "CUSTOM_INVESTIGATION",
+        "description": "Investigate payment for Sri Balaji Ent Rs 18,400",
+        "scenario_metadata": {
+            "custom_query": "Investigate payment for Sri Balaji Ent Rs 18,400",
+            "raw_narration": "Dear SBI User, your A/c XX4892 debited by Rs 18,400.00 on 18-Nov-26 transfer to SRI BALAJI ENT UPI Ref 632819045112"
+        }
+    }
+    events = list(run_investigation_sync("CASE-CUSTOM-SAMPLE2-SMS", case_data=case_data))
+    verdicts = [e for e in events if e.get("type") == "verdict"]
+    assert len(verdicts) == 1
+    vdata = verdicts[0]["data"]
+    assert vdata["decision"] == "AMOUNT_MISMATCH"
+    # Claimed 18400 vs ledger debit 88452.76 -> delta 70052.76 held
+    actions = vdata["actions"]
+    assert any(abs(act.get("variance_amount", 0) - 70052.76) < 0.1 for act in actions)
+
+
+def test_utr_direction_mismatch_inbound_vs_debit():
+    """Verify DIRECTION_MISMATCH when claim says inbound customer payment but UTR is a bank debit."""
+    case_data = {
+        "case_id": "CASE-CUSTOM-DIR-UTR",
+        "scenario_type": "CUSTOM_INVESTIGATION",
+        "description": "Customer claims customer paid us deposit received for UTR 632819045112",
+        "scenario_metadata": {
+            "custom_query": "Customer claims customer paid us deposit received for UTR 632819045112",
+            "raw_narration": "Credit received from customer for order ref UTR 632819045112"
+        }
+    }
+    events = list(run_investigation_sync("CASE-CUSTOM-DIR-UTR", case_data=case_data))
+    verdicts = [e for e in events if e.get("type") == "verdict"]
+    assert len(verdicts) == 1
+    vdata = verdicts[0]["data"]
+    assert vdata["decision"] == "DIRECTION_MISMATCH"
+    assert "Direction Mismatch" in vdata["headline"]
+
+
+def test_vendor_due_diligence_summary():
+    """Verify VENDOR_RISK_SUMMARY read-only exposure report with zero payout actions."""
+    case_data = {
+        "case_id": "CASE-CUSTOM-VDD",
+        "scenario_type": "CUSTOM_INVESTIGATION",
+        "description": "Is Sri Balaji Enterprises safe to pay?",
+        "scenario_metadata": {
+            "custom_query": "Is Sri Balaji Enterprises safe to pay?"
+        }
+    }
+    events = list(run_investigation_sync("CASE-CUSTOM-VDD", case_data=case_data))
+    verdicts = [e for e in events if e.get("type") == "verdict"]
+    assert len(verdicts) == 1
+    vdata = verdicts[0]["data"]
+    assert vdata["decision"] == "VENDOR_RISK_SUMMARY"
+    assert "Vendor Exposure Summary" in vdata["headline"]
+    # Read-only inquiry must have NO payout buttons
+    assert len(vdata["actions"]) == 0
+    assert "Vendor Due Diligence Exposure Summary" in vdata["markdown_brief"]
+
+
+def test_vendor_due_diligence_not_found():
+    """Verify VENDOR_NOT_FOUND when vendor does not exist in master, offering KYC onboarding guidance."""
+    case_data = {
+        "case_id": "CASE-CUSTOM-VDD-NONE",
+        "scenario_type": "CUSTOM_INVESTIGATION",
+        "description": "Is Totally Different Traders safe to pay?",
+        "scenario_metadata": {
+            "custom_query": "Is Totally Different Traders safe to pay?"
+        }
+    }
+    events = list(run_investigation_sync("CASE-CUSTOM-VDD-NONE", case_data=case_data))
+    verdicts = [e for e in events if e.get("type") == "verdict"]
+    assert len(verdicts) == 1
+    vdata = verdicts[0]["data"]
+    assert vdata["decision"] == "VENDOR_NOT_FOUND"
+    assert "Vendor Not Found" in vdata["headline"]
+    assert len(vdata["actions"]) == 0
+    assert "onboard vendor master before creating a purchase order" in vdata["markdown_brief"]
+
+
+def test_nodal_batch_settlement_warning():
+    """Verify NODAL_BATCH_SETTLEMENT when customer payment claim matches Razorpay batch payout."""
+    case_data = {
+        "case_id": "CASE-CUSTOM-NODAL",
+        "scenario_type": "CUSTOM_INVESTIGATION",
+        "description": "Customer customer paid us order payment Rs 1,500 with UTR 382407240552",
+        "scenario_metadata": {
+            "custom_query": "Customer customer paid us order payment Rs 1,500 with UTR 382407240552",
+            "raw_narration": "Customer paid us Rs 1,500 for order with UTR 382407240552"
+        }
+    }
+    events = list(run_investigation_sync("CASE-CUSTOM-NODAL", case_data=case_data))
+    verdicts = [e for e in events if e.get("type") == "verdict"]
+    assert len(verdicts) == 1
+    vdata = verdicts[0]["data"]
+    assert vdata["decision"] == "NODAL_BATCH_SETTLEMENT"
+    assert "Nodal Batch Settlement Alert" in vdata["headline"]
+    assert "is a Razorpay nodal settlement batch" in vdata["markdown_brief"]
+
+
+def test_customer_payment_mark_order_paid_cta():
+    """Verify that customer payment claims recommend MARK_ORDER_PAID, never APPROVE_DISBURSEMENT."""
+    case_data = {
+        "case_id": "CASE-CUSTOM-CUST-PAID",
+        "scenario_type": "CUSTOM_INVESTIGATION",
+        "description": "Customer customer paid us for invoice INV-2026-0037",
+        "scenario_metadata": {
+            "custom_query": "Customer customer paid us for invoice INV-2026-0037",
+            "raw_narration": "Inbound customer payment received for INV-2026-0037"
+        }
+    }
+    events = list(run_investigation_sync("CASE-CUSTOM-CUST-PAID", case_data=case_data))
+    verdicts = [e for e in events if e.get("type") == "verdict"]
+    assert len(verdicts) == 1
+    vdata = verdicts[0]["data"]
+    # Should recommend MARK_ORDER_PAID
+    actions = vdata["actions"]
+    action_types = [a.get("action") for a in actions]
+    assert "APPROVE_DISBURSEMENT" not in action_types
+    assert "MARK_ORDER_PAID" in action_types
+
+
+def test_all_153_vendors_no_fanout_crash():
+    """Verify all 153 unique vendors execute without Cartesian fanout or look-alike crashes."""
+    vendors_res = db_plane.execute_query("SELECT DISTINCT vendor_name FROM tally_invoices ORDER BY vendor_name")
+    unique_vendors = [row[0] for row in vendors_res["rows"] if row[0]]
+    assert len(unique_vendors) == 153
+
+    # Explicitly assert target look-alike vendor groups are present
+    assert any("Venkateshwara" in v for v in unique_vendors)
+    assert any("Delta" in v for v in unique_vendors)
+    assert any("Radhe Shyam" in v for v in unique_vendors)
+
+    for vendor in unique_vendors:
+        sql, params = _build_deterministic_sql(f"Check vendor {vendor}")
+        res = db_plane.execute_query(sql, params)
+        assert res is not None
+        assert res["row_count"] <= 25  # Capped by defensive LIMIT 25 and QUALIFY
+
+
+def test_memo_checklist_parity():
+    """Verify that memo checkmarks strictly reflect the dynamic verification_checklist object."""
+    case_data = {
+        "case_id": "CASE-MEMO-PARITY",
+        "scenario_type": "CUSTOM_INVESTIGATION",
+        "description": "Verify Ganpati Trading Co UTR 432910485799",
+        "scenario_metadata": {
+            "custom_query": "Verify Ganpati Trading Co UTR 432910485799",
+            "raw_narration": "UPI/432910485799/041126123045/PAYTO GANPATI TRADING CO/HDFC/001928374829"
+        }
+    }
+    events = list(run_investigation_sync("CASE-MEMO-PARITY", case_data=case_data))
+    verdicts = [e for e in events if e.get("type") == "verdict"]
+    assert len(verdicts) == 1
+    vdata = verdicts[0]["data"]
+    checklist = vdata.get("verification_checklist", {})
+    brief = vdata.get("markdown_brief", "")
+
+    # For each checklist item, verify its pass/fail status is accurately represented in the memo
+    for item in checklist.get("checked", []):
+        assert f"- [x] {item}" in brief
+    for item in checklist.get("pending_human_signoff", []):
+        assert f"- [ ] {item}" in brief
+
+

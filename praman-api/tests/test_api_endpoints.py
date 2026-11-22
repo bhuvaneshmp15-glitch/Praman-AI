@@ -1,9 +1,7 @@
-"""Integration tests for Praman FastAPI Backend using TestClient."""
+"""Integration tests for Praman FastAPI Backend using DirectClient."""
+import time
 import pytest
-from fastapi.testclient import TestClient
-from praman_api.main import app
-
-client = TestClient(app)
+from praman_api.direct_client import client
 
 
 def test_api_health():
@@ -170,4 +168,89 @@ def test_narration_tester_tool():
     assert top_cand["sim_score"] >= 0.85
     assert data["latency_ms"] >= 0
     assert isinstance(data["matched_bank_rows"], list)
+
+
+def test_upload_statement_csv():
+    """Verify POST /api/tools/upload-statement reconciles an uploaded CSV statement in DuckDB."""
+    csv_content = (
+        "txn_date,narration,withdrawal,deposit\n"
+        "2026-11-04,UPI/432910485799/041126123045/PAYTO GANPATI TRADING CO/HDFC/001928374829,0,14500.00\n"
+        "2026-11-05,UTR-999999999999-ACME PVT LTD-CITI0000001,15000,0\n"
+    )
+    files = {"file": ("test_statement.csv", csv_content.encode("utf-8"), "text/csv")}
+    resp = client.post("/api/tools/upload-statement", files=files)
+    assert resp.status_code == 200
+    data = resp.json()
+
+    assert data["filename"] == "test_statement.csv"
+    assert data["total_rows"] == 2
+    assert data["reconciled_count"] == 1
+    assert data["unreconciled_count"] == 1
+    assert len(data["matched_records"]) == 1
+    assert data["matched_records"][0]["extracted_utr"] == "432910485799"
+    assert len(data["unmatched_records"]) == 1
+    assert data["unmatched_records"][0]["extracted_utr"] == "999999999999"
+    assert "1 reconciled" in data["summary"]
+    assert data["latency_ms"] >= 0
+
+
+def test_upload_statement_amount_mismatch():
+    """Verify that ₹100 credit with a ₹48,973.61 captured UPI UTR returns ACTION_REQUIRED (Amount mismatch)."""
+    csv_content = (
+        "txn_date,narration,withdrawal,deposit\n"
+        "2026-11-04,UPI/741492408160/SETTLEMENT/HDFC,0,100.00\n"
+    )
+    files = {"file": ("test_amt_mismatch.csv", csv_content.encode("utf-8"), "text/csv")}
+    resp = client.post("/api/tools/upload-statement", files=files)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total_rows"] == 1
+    assert data["reconciled_count"] == 0
+    assert data["unreconciled_count"] == 1
+    rec = data["matched_records"][0]
+    assert rec["reconciliation_status"] == "ACTION_REQUIRED"
+    assert "Amount mismatch" in rec["reason"]
+    assert "100.00" in rec["reason"]
+    assert "48,973.61" in rec["reason"]
+
+
+def test_upload_statement_direction_mismatch():
+    """Verify that an outgoing debit with a captured UPI UTR returns ACTION_REQUIRED (Direction mismatch)."""
+    csv_content = (
+        "txn_date,narration,withdrawal,deposit\n"
+        "2026-11-04,UPI/741492408160/OUTGOING DEBIT,48973.61,0\n"
+    )
+    files = {"file": ("test_dir_mismatch.csv", csv_content.encode("utf-8"), "text/csv")}
+    resp = client.post("/api/tools/upload-statement", files=files)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total_rows"] == 1
+    assert data["reconciled_count"] == 0
+    assert data["unreconciled_count"] == 1
+    rec = data["matched_records"][0]
+    assert rec["reconciliation_status"] == "ACTION_REQUIRED"
+    assert "Direction mismatch" in rec["reason"]
+
+
+def test_upload_statement_1000_rows_under_3_seconds():
+    """Verify that a 1,000-row CSV upload finishes in under 3 seconds."""
+    rows = ["txn_date,narration,withdrawal,deposit"]
+    for i in range(1000):
+        if i % 2 == 0:
+            rows.append(f"2026-11-04,UPI/741492408160/TXN{i},0,48973.61")
+        else:
+            rows.append(f"2026-11-04,NEFT-ROW-{i}-MISC-EXPENSE,500.00,0")
+    csv_content = "\n".join(rows)
+
+    start = time.time()
+    files = {"file": ("large_1000_statement.csv", csv_content.encode("utf-8"), "text/csv")}
+    resp = client.post("/api/tools/upload-statement", files=files)
+    duration = time.time() - start
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total_rows"] == 1000
+    assert duration < 3.0, f"Upload took {duration:.2f}s, expected < 3.0s"
+    assert data["latency_ms"] < 3000.0
+
 

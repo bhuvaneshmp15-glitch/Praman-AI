@@ -1,6 +1,6 @@
 """Tests for Praman Financial Copilot Public APIs and Zero-Key Deterministic Execution."""
 import pytest
-from fastapi.testclient import TestClient
+from praman_api.direct_client import client
 
 from praman_api.main import app
 from praman_api.adapters.public_apis import (
@@ -11,8 +11,6 @@ from praman_api.adapters.public_apis import (
 )
 from praman_api.agent.loop import run_investigation_sync
 from praman_api.config import settings
-
-client = TestClient(app)
 
 
 def test_verify_ifsc_live():

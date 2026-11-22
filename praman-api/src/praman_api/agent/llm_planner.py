@@ -102,18 +102,43 @@ def parse_investigation_intent(query: str, raw_narration: Optional[str] = None) 
     # 5. Extract Direction (INBOUND vs OUTBOUND)
     combined_lower = combined.lower()
     direction = None
-    if any(term in combined_lower for term in ["customer paid", "credit received", "credited", "inbound", "deposit received"]):
+    if any(term in combined_lower for term in ["customer paid", "customer payment", "credit received", "credited", "inbound", "deposit received", "paid us", "order payment", "order paid"]):
         direction = "INBOUND"
     elif any(term in combined_lower for term in ["debited", "paid to", "debit", "outbound", "payout to", "transfer to"]):
         direction = "OUTBOUND"
 
-    # 6. Extract Vendor Query
-    vendor_query = norm_indic_vendor(raw_narration or query)
+    # 6. Extract Claimed Vendor & Vendor Query
+    # Check for vendor due diligence pattern: e.g. "Is Sri Balaji Enterprises safe to pay?" or "Check vendor Acme Traders"
+    vendor_due_match = re.search(
+        r"(?i)\b(?:is|check|audit|verify|review)\s+(?:vendor\s+)?([A-Za-z0-9\s.,&'-]+?)\s+(?:safe to pay|safe|risk|due diligence|status|compliance|profile)\b",
+        combined
+    )
+    if not vendor_due_match:
+        vendor_due_match = re.search(r"(?i)\b(?:check|audit|review)\s+vendor\s+([A-Za-z0-9\s.,&'-]+)", combined)
+
+    # Universal vendor target extraction: e.g. "Release payment for INV-2026-0001 to Totally Different Traders"
+    claimed_vendor = None
+    to_vendor_match = re.search(
+        r"(?i)\b(?:to|vendor|payee|for(?!\s+inv|\s+invoice))\s+([A-Za-z][A-Za-z0-9\s.,&'-]+?)(?:\s+(?:pvt|ltd|limited|enterprises|ent|traders|co|solutions|llp|corp)\.?)?(?:\s+(?:rs\.?|inr|₹|amount|on|\bINV|\bUTR|\d{2,}|$))",
+        combined
+    )
+    if to_vendor_match:
+        cand = to_vendor_match.group(1).strip()
+        if cand and len(cand) > 2 and cand.upper() not in ("PAYMENT", "DISBURSEMENT", "INVOICE", "OUR", "US", "ME", "THE"):
+            claimed_vendor = cand
+    elif vendor_due_match:
+        claimed_vendor = vendor_due_match.group(1).strip()
+
+    vendor_query = norm_indic_vendor(claimed_vendor or raw_narration or query)
 
     # 7. Intent classification
     combined_upper = combined.upper()
     if invoice_id:
         intent = "INVOICE_DISCREPANCY"
+    elif vendor_due_match and not utr:
+        intent = "VENDOR_DUE_DILIGENCE"
+    elif any(term in combined_lower for term in ["customer paid", "customer payment", "order payment", "paid us"]):
+        intent = "INBOUND_CUSTOMER_PAYMENT"
     elif utr or "UPI" in combined_upper or "RRN" in combined_upper or "DOUBLE" in combined_upper or "CHARGEBACK" in combined_upper:
         intent = "UPI_CHARGEBACK"
     elif gstin:
@@ -131,6 +156,7 @@ def parse_investigation_intent(query: str, raw_narration: Optional[str] = None) 
         "invoice_id": invoice_id,
         "gstin": gstin,
         "vendor_query": vendor_query,
+        "claimed_vendor": claimed_vendor,
         "amount": amount,
         "direction": direction
     }
@@ -305,14 +331,37 @@ def _build_deterministic_sql(
             WHERE extract_utr(narration) = $1
         )
         SELECT u.payment_id, u.order_id, u.created_at, u.gross_amount, u.net_settlement, u.status, u.rrn_utr, u.customer_vpa,
-               b.row_id AS bank_row, b.txn_date AS bank_date, b.narration AS bank_narration, b.deposit AS bank_deposit
+               b.row_id AS bank_row, b.txn_date AS bank_date, b.narration AS bank_narration, b.deposit AS bank_deposit, b.withdrawal AS bank_withdrawal
         FROM upi_match u
         FULL OUTER JOIN bank_match b ON 1=1
         WHERE u.payment_id IS NOT NULL OR b.row_id IS NOT NULL;
         """.strip()
         return sql, [utr]
 
-    # Case C: GSTIN query
+    # Case C: Vendor Due Diligence Inquiry (e.g., "Is Sri Balaji Enterprises safe to pay?")
+    if parsed.get("intent") == "VENDOR_DUE_DILIGENCE" and vendor:
+        sql = """
+        WITH vendor_inv AS (
+            SELECT t.invoice_id, t.invoice_date, t.vendor_name, t.vendor_gstin, t.taxable_value, t.igst_amount, t.total_amount, t.payout_status,
+                   COALESCE(g.itc_eligible_amount, 0.0) AS gstr2b_itc,
+                   COALESCE(g.filing_status, 'NOT_FILED') AS gstr2b_filing_status,
+                   jw_sim(norm_indic_vendor(t.vendor_name), norm_indic_vendor($1)) AS sim_score
+            FROM tally_invoices t
+            LEFT JOIN gstr2b_tax g ON t.invoice_id = g.invoice_num
+            WHERE jw_sim(norm_indic_vendor(t.vendor_name), norm_indic_vendor($1)) >= 0.90
+            QUALIFY ROW_NUMBER() OVER (
+                PARTITION BY t.invoice_id 
+                ORDER BY jw_sim(norm_indic_vendor(t.vendor_name), norm_indic_vendor(COALESCE(g.legal_trade_name, ''))) DESC
+            ) = 1
+        )
+        SELECT *
+        FROM vendor_inv
+        ORDER BY invoice_date DESC
+        LIMIT 25;
+        """.strip()
+        return sql, [vendor]
+
+    # Case D: GSTIN query
     if gstin:
         sql = """
         SELECT t.invoice_id, t.vendor_name, t.vendor_gstin, t.taxable_value, t.igst_amount, t.total_amount, t.payout_status,
@@ -327,18 +376,23 @@ def _build_deterministic_sql(
     if vendor and len(vendor) >= 3:
         sql = """
         WITH vendor_candidates AS (
-            SELECT invoice_id, invoice_date, vendor_name, vendor_gstin, taxable_value, igst_amount, total_amount, payout_status,
-                   jw_sim(norm_indic_vendor(vendor_name), norm_indic_vendor($1)) AS sim_score
-            FROM tally_invoices
-            WHERE jw_sim(norm_indic_vendor(vendor_name), norm_indic_vendor($1)) >= 0.88
+            SELECT t.invoice_id, t.invoice_date, t.vendor_name, t.vendor_gstin, t.taxable_value, t.igst_amount, t.total_amount, t.payout_status,
+                   COALESCE(g.itc_eligible_amount, 0.0) AS gstr2b_itc,
+                   COALESCE(g.filing_status, 'NOT_FILED') AS gstr2b_filing_status,
+                   jw_sim(norm_indic_vendor(t.vendor_name), norm_indic_vendor($1)) AS sim_score
+            FROM tally_invoices t
+            LEFT JOIN gstr2b_tax g ON t.invoice_id = g.invoice_num
+            WHERE jw_sim(norm_indic_vendor(t.vendor_name), norm_indic_vendor($1)) >= 0.88
+            QUALIFY ROW_NUMBER() OVER (
+                PARTITION BY t.invoice_id 
+                ORDER BY jw_sim(norm_indic_vendor(t.vendor_name), norm_indic_vendor(COALESCE(g.legal_trade_name, ''))) DESC
+            ) = 1
         )
-        SELECT v.invoice_id, v.invoice_date, v.vendor_name, v.vendor_gstin, v.taxable_value, v.igst_amount, v.total_amount, v.payout_status,
-               COALESCE(g.itc_eligible_amount, 0.0) AS gstr2b_itc,
-               COALESCE(g.filing_status, 'NOT_FILED') AS gstr2b_filing_status
-        FROM vendor_candidates v
-        LEFT JOIN gstr2b_tax g ON v.invoice_id = g.invoice_num
-        ORDER BY v.sim_score DESC, v.invoice_date DESC
-        LIMIT 5;
+        SELECT invoice_id, invoice_date, vendor_name, vendor_gstin, taxable_value, igst_amount, total_amount, payout_status,
+               gstr2b_itc, gstr2b_filing_status, sim_score
+        FROM vendor_candidates
+        ORDER BY sim_score DESC, invoice_date DESC
+        LIMIT 25;
         """.strip()
         return sql, [vendor]
 
@@ -349,7 +403,11 @@ def _build_deterministic_sql(
            COALESCE(g.filing_status, 'NOT_FILED') AS gstr2b_filing_status
     FROM tally_invoices t
     LEFT JOIN gstr2b_tax g ON t.invoice_id = g.invoice_num
+    QUALIFY ROW_NUMBER() OVER (
+        PARTITION BY t.invoice_id 
+        ORDER BY jw_sim(norm_indic_vendor(t.vendor_name), norm_indic_vendor(COALESCE(g.legal_trade_name, ''))) DESC
+    ) = 1
     ORDER BY t.invoice_date DESC
-    LIMIT 5;
+    LIMIT 25;
     """.strip()
     return sql, []
