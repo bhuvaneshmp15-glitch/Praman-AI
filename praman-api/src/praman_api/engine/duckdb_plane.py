@@ -71,7 +71,11 @@ class DuckDBPlane:
 
     def _get_main_conn(self) -> duckdb.DuckDBPyConnection:
         if self._main_conn is None:
-            self._main_conn = duckdb.connect(str(self.db_path), read_only=False)
+            try:
+                self._main_conn = duckdb.connect(str(self.db_path), read_only=False)
+            except Exception:
+                # Fallback for serverless environments (e.g. Vercel read-only filesystem)
+                self._main_conn = duckdb.connect(str(self.db_path), read_only=True)
             self._register_udfs(self._main_conn)
         return self._main_conn
 

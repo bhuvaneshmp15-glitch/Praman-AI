@@ -6,7 +6,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg?style=flat&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![DuckDB](https://img.shields.io/badge/DuckDB-1.1.0-FFF000.svg?style=flat&logo=duckdb&logoColor=black)](https://duckdb.org)
 [![Vite + React](https://img.shields.io/badge/Frontend-React_18_+_Vite-61DAFB.svg?style=flat&logo=react&logoColor=black)](https://vitejs.dev)
-[![Tests](https://img.shields.io/badge/Pytest-57%20Passed%20(100%25)-success.svg)](https://pytest.org)
+[![Tests](https://img.shields.io/badge/Pytest-59%20Passed%20(100%25)-success.svg)](https://pytest.org)
 [![Offline-First](https://img.shields.io/badge/Engine-Offline--First%20%C2%B7%20Optional%20LLM%20Key-brightgreen.svg)](#-live-keyless-public-apis)
 [![Live Sandbox](https://img.shields.io/badge/Sandbox-Live%20Unscripted%20Intake%20%2B%20CSV%20Upload-blue.svg)](#-interactive-judge-testing--unscripted-sandbox)
 
@@ -177,13 +177,13 @@ Praman integrates 4 public endpoints (`Auth: None`) with 3.0s timeouts and deter
 
 ---
 
-## ⚡ The 3 Canonical Judge Scenarios
+## ⚡ The 4 Canonical Judge Scenarios
 
 ### Scenario 1: Missing GSTR-2B ITC Hold (`CASE-GST-104`)
 - **Vendor:** Sri Balaji Enterprises (`33AABCS1429B1Z2`, IFSC: `KVBL0001245`).
 - **Disputed Invoice:** `INV-2026-104` for **₹1,84,000.00** (Taxable ₹1,55,932.20 + IGST ₹28,067.80).
 - **Core Discrepancy:** Missing in GSTR-2B portal (`itc_eligible = ₹0.00`). Under Section 16(2)(aa) of the CGST Act, 2017, Input Tax Credit cannot be availed in GSTR-3B without GSTR-2B reflection. Paying the full invoice before filing puts **₹28,067.80 of operating working capital at risk (blocked until vendor files GSTR-1, subject to Section 16(4) 30th November statutory deadline)**.
-- **Cashflow Impact:** Current balance **₹3,12,450.00**; Critical HDFC Business Loan EMI **₹1,10,000.00** due in 7 days.
+- **Cashflow Impact:** Current balance **₹3,12,450.00**; Critical HDFC Business Loan EMI **₹1,10,000.00** due 2026-11-25.
   - *Full Payout:* Leaves ₹1,28,450.00 cash, post-EMI buffer ₹18,450.00 (**1.17x EMI coverage** $\rightarrow$ `CRITICAL_DEFAULT_RISK`).
   - *Praman Withholding:* Holds ₹28,067.80 GST portion; leaves ₹1,56,517.80 cash, post-EMI buffer ₹46,517.80 (**1.42x EMI coverage**).
   - *Conservative Full Hold pending filing:* Preserves ₹3,12,450.00 operating cash, post-EMI buffer ₹2,02,450.00 (**2.84x EMI coverage**).
@@ -197,6 +197,11 @@ Praman integrates 4 public endpoints (`Auth: None`) with 3.0s timeouts and deter
 - **Vendor:** CloudSphere Infrastructure Solutions Pvt Ltd (`INV-2026-881`, ₹84,000.00).
 - **Evidence:** Outage violated 99.5% uptime commitment. Policy `POL-SLA-01` (`SEC-4.2`) mandates pro-rata service credit of ₹5,600.00 via debit note.
 - **Verdict:** Issue Debit Note `DN-2026-881` for ₹5,600.00 and disburse net ₹78,400.00.
+
+### Scenario 4: Split-Payment Duplicate Payout Risk (`CASE-DUP-404`)
+- **Vendor:** Apex Logistics Global Pvt Ltd (`INV-2026-404`, ₹1,25,000.00, IFSC: `ICIC0000009`).
+- **Evidence:** Invoice INV-2026-404 marked `PENDING_APPROVAL` in ERP, yet bank statement reflects two split disbursements of ₹62,500.00 each against PO8921.
+- **Verdict:** Flag duplicate disbursement risk (`PREVENT_DUPLICATE_PAYOUT`), halt duplicate payout, and request vendor ledger reconciliation before releasing funds.
 
 ---
 
@@ -249,7 +254,7 @@ The script automatically verifies/generates the 10,040 rows in `praman-data/`, s
 
 ## 🧪 Comprehensive Verification Suite
 
-Run the full pytest suite (all 57 checks pass cleanly offline with zero `.env` keys required):
+Run the full pytest suite (all 59 checks pass cleanly offline with zero `.env` keys required):
 
 ```powershell
 python -m pytest praman-api/tests/ -v
@@ -298,6 +303,8 @@ praman-api/tests/test_api_endpoints.py::test_upload_statement_amount_mismatch PA
 praman-api/tests/test_api_endpoints.py::test_upload_statement_direction_mismatch PASSED
 praman-api/tests/test_api_endpoints.py::test_upload_statement_1000_rows_under_3_seconds PASSED
 praman-api/tests/test_duckdb_plane.py::test_guardrail_sum_running_balance PASSED
+praman-api/tests/test_duckdb_plane.py::test_guardrail_sum_coalesce_running_balance PASSED
+praman-api/tests/test_duckdb_plane.py::test_guardrail_sum_cte_alias_running_balance PASSED
 praman-api/tests/test_duckdb_plane.py::test_guardrail_cartesian_fanout_threshold PASSED
 praman-api/tests/test_duckdb_plane.py::test_guardrail_mutation_prevention PASSED
 praman-api/tests/test_duckdb_plane.py::test_udf_extract_utr_in_duckdb PASSED
@@ -314,7 +321,7 @@ praman-api/tests/test_udfs.py::test_norm_indic_vendor PASSED
 praman-api/tests/test_udfs.py::test_jw_sim PASSED
 praman-api/tests/test_udfs.py::test_validate_gstin_checksum PASSED
 
-====================== 57 passed in 3.18s ======================
+====================== 59 passed in 3.18s ======================
 ```
 
 
@@ -338,7 +345,7 @@ Praman-AI/
 ├── praman-api/                        # FastAPI Backend & Neuro-Symbolic Agent Engine
 │   ├── pyproject.toml
 │   ├── requirements.txt
-│   ├── tests/                         # 57 Pytest unit & integration tests
+│   ├── tests/                         # 59 Pytest unit & integration tests
 │   │   ├── test_udfs.py
 │   │   ├── test_duckdb_plane.py
 │   │   ├── test_agent_engine.py
@@ -394,13 +401,13 @@ Praman-AI/
 
 - [x] **10,000+ Row Dataset**: 10,040 rows seeded across 6 relational tables with verified invariants (90.08% UPI reconciliation coverage, zero MDR, positive running balance).
 - [x] **4 Indic/Financial Python UDFs**: `extract_utr`, `norm_indic_vendor`, `jw_sim`, `validate_gstin_checksum`.
-- [x] **Anti-Hallucination Guardrails**: Prohibits `SUM(running_balance)` and Cartesian joins $< 0.90$.
+- [x] **Anti-Hallucination Guardrails**: AST-based interception strictly prohibits `SUM(running_balance)` (including through `COALESCE`, `CAST`, arithmetic wrappers, and CTE aliases; legitimate `AVG(running_balance)` remains allowed for balance metrics) and Cartesian joins $< 0.90$.
 - [x] **Deterministic SQL Guardrails**: Naive fuzzy attempt intercepted $\rightarrow$ auto-healed into defensive CTE with window ranking.
 - [x] **Zero Mental Arithmetic**: Deterministic Python calculator enforces exact rupee liquidity math (1.17x risk vs. 1.42x protected).
 - [x] **Offline-First Deterministic Engine & Optional LLM Integration**: 100% of SQL execution, entity matching, and verdict classification runs offline and deterministically without external API dependencies. Optional LLM integration (Groq / OpenRouter / OpenAI / Gemini) powers unstructured intake extraction and memo drafting with local PII redaction.
 - [x] **Evidence-Grounded Custom Cases & Statement Upload**: Data-driven verdict branching (`NOT_FOUND_IN_LEDGER`, `VERIFIED_SAFE_TO_PAY`, `HOLD_DISPUTED_PORTION`, `VENDOR_MISMATCH`) with zero fabricated citations. Live CSV upload parses arbitrary judge bank statements directly into DuckDB with 3-way reconciliation.
 - [x] **Editorial Financial Dossier UI**: Warm paper aesthetic, deep obsidian SQL feed, Recharts runway chart, and interactive human approval cinematic.
-- [x] **100% Test Pass Rate**: 57 automated test cases passing cleanly across UDFs, guardrails, math, endpoints, statement upload, and all 153 vendor queries.
+- [x] **100% Test Pass Rate**: 59 automated test cases passing cleanly across UDFs, guardrails, math, endpoints, statement upload, and all 153 vendor queries.
 
 ---
 *Developed with precision for Arthaton 2026.*

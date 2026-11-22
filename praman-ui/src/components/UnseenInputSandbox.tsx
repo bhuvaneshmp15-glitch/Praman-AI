@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Send, Sparkles, FileText, CheckCircle2, HelpCircle, Upload, Check, AlertCircle, ArrowUpRight, Search } from 'lucide-react';
+import { API_BASE } from '../api/client';
 
 interface UnseenInputSandboxProps {
   isInvestigating: boolean;
@@ -99,7 +100,7 @@ export const UnseenInputSandbox: React.FC<UnseenInputSandboxProps> = ({
       const formData = new FormData();
       formData.append('file', file);
 
-      const resp = await fetch('/api/tools/upload-statement', {
+      const resp = await fetch(`${API_BASE}/tools/upload-statement`, {
         method: 'POST',
         body: formData,
       });

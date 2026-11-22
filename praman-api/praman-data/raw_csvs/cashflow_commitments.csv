@@ -1,0 +1,26 @@
+commitment_id,commitment_type,lender_or_payee,due_date,amount,priority
+COM-001,LOAN_EMI,HDFC Bank Business Banking (Loan A/c 50200091823),2026-11-25,110000.0,CRITICAL_DEFAULT_RISK
+COM-002,PAYROLL,SME Monthly Executive & Engineering Payroll Disbursement,2026-11-30,380000.0,CRITICAL_DEFAULT_RISK
+COM-003,RENT,Commercial Warehouse Lease - Bhiwandi Logistics Complex,2026-12-05,95000.0,HIGH
+COM-004,GST_CHALLAN,Goods & Services Tax Network (GSTN) Monthly PMT-06,2026-11-20,84500.0,CRITICAL_DEFAULT_RISK
+COM-005,LOAN_EMI,ICICI Bank Machinery & Equipment Term Loan,2026-12-01,65000.0,HIGH
+COM-006,PAYROLL,Contract Logistics & Security Staff Fortnightly Payout,2026-11-22,45000.0,HIGH
+COM-007,RENT,Corporate Headquarters Lease - DLF Horizon Tower,2026-12-01,125000.0,HIGH
+COM-008,GST_CHALLAN,TDS Deductions Treasury Challan Section 194C / 194J,2026-12-07,38200.0,HIGH
+COM-009,LOAN_EMI,SBI Working Capital Credit Line Minimum Interest,2026-11-28,42000.0,NORMAL
+COM-010,PAYROLL,Sales Team Incentive & Commission Pool,2026-12-10,52000.0,NORMAL
+COM-011,RENT,Regional Hub Lease - Chennai Guindy Estate,2026-12-05,35000.0,NORMAL
+COM-012,LOAN_EMI,Kotak Commercial Vehicle Fleet Hypothecation EMI,2026-12-03,28000.0,NORMAL
+COM-013,GST_CHALLAN,Professional Tax State Statutory Remittance,2026-11-26,14500.0,NORMAL
+COM-014,PAYROLL,Employee Provident Fund (EPFO) Monthly ECR Deposit,2026-12-15,48000.0,HIGH
+COM-015,RENT,Branch Office Space - Pune Baner High Street,2026-12-05,40000.0,NORMAL
+COM-016,LOAN_EMI,Axis Bank Short-Term Invoice Discounting Facility,2026-12-12,72000.0,NORMAL
+COM-017,PAYROLL,Employee State Insurance (ESIC) Statutory Contribution,2026-12-15,16800.0,NORMAL
+COM-018,GST_CHALLAN,Advance Corporate Income Tax Q3 Instalment,2026-12-15,185000.0,CRITICAL_DEFAULT_RISK
+COM-019,RENT,Secondary Transit Storage - Hyderabad Shamshabad,2026-12-01,22000.0,NORMAL
+COM-020,LOAN_EMI,Tata Capital Supply Chain Credit Facility,2026-12-20,34000.0,NORMAL
+COM-021,PAYROLL,Customer Support & BPO Vendor Monthly Retainer,2026-12-08,68000.0,NORMAL
+COM-022,RENT,Server Rack Colocation Facility - Sify Data Center,2026-12-02,45000.0,NORMAL
+COM-023,LOAN_EMI,Bajaj Finserv Business Overdraft Interest,2026-12-18,19500.0,NORMAL
+COM-024,GST_CHALLAN,Municipal Corporation Commercial Property Tax,2026-12-22,18000.0,NORMAL
+COM-025,PAYROLL,Annual Gratuity Trust Statutory Reserve Allocation,2026-12-28,50000.0,NORMAL

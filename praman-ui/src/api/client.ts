@@ -1,6 +1,13 @@
 import { HealthResponse, DiscrepancyCase, CitationDetailResponse, ApprovalResponse } from '../types';
 
-const API_BASE = '/api';
+declare const process: any;
+
+export const API_BASE: string =
+  typeof process !== 'undefined' && process?.env?.PRAMAN_API_URL
+    ? `${String(process.env.PRAMAN_API_URL).replace(/\/$/, '')}/api`
+    : (typeof (import.meta as any)?.env?.VITE_API_BASE_URL === 'string'
+        ? (import.meta as any).env.VITE_API_BASE_URL
+        : '/api');
 
 export async function fetchHealth(): Promise<HealthResponse> {
   const res = await fetch(`${API_BASE}/health`);

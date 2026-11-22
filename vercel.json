@@ -1,0 +1,47 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "praman-api": {
+      "root": "praman-api",
+      "framework": "fastapi"
+    },
+    "praman-ui": {
+      "root": "praman-ui",
+      "framework": "vite",
+      "bindings": [
+        {
+          "type": "service",
+          "service": "praman-api",
+          "format": "url",
+          "env": "PRAMAN_API_URL"
+        }
+      ]
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": {
+        "service": "praman-api"
+      }
+    },
+    {
+      "source": "/docs",
+      "destination": {
+        "service": "praman-api"
+      }
+    },
+    {
+      "source": "/openapi.json",
+      "destination": {
+        "service": "praman-api"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "praman-ui"
+      }
+    }
+  ]
+}

@@ -71,7 +71,7 @@ def patch_all_scenarios(
         # Ensure that no entry exists with full eligible credit for this invoice
         df_gstr2b = df_gstr2b[df_gstr2b["invoice_num"] != "INV-2026-104"].copy()
 
-    # 5. In cashflow_commitments.csv: upcoming 30-day critical EMIs = 110,000.00 (HDFC Business Loan EMI due in 7 days)
+    # 5. In cashflow_commitments.csv: upcoming 30-day critical EMIs = 110,000.00 (HDFC Business Loan EMI due 2026-11-25)
     df_commitments.loc[0, "commitment_id"] = "COM-001"
     df_commitments.loc[0, "commitment_type"] = "LOAN_EMI"
     df_commitments.loc[0, "lender_or_payee"] = "HDFC Bank Business Banking (Loan A/c 50200091823)"
