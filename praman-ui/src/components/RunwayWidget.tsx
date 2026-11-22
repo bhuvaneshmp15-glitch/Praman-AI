@@ -29,7 +29,7 @@ export const RunwayWidget: React.FC<RunwayWidgetProps> = ({ runwayData }) => {
 
   const chartData = [
     {
-      name: 'Unprotected Payout (Risk)',
+      name: 'Unprotected Payout',
       cash: cashWithoutPraman,
       freeCash: freeCashWithout,
       coverage: coverageWithout,
@@ -37,7 +37,7 @@ export const RunwayWidget: React.FC<RunwayWidgetProps> = ({ runwayData }) => {
       fill: '#F87171', // Red/Rose
     },
     {
-      name: 'Praman Recommended (Protected)',
+      name: 'Praman Protected',
       cash: cashWithPraman,
       freeCash: freeCashWith,
       coverage: coverageWith,
@@ -73,6 +73,38 @@ export const RunwayWidget: React.FC<RunwayWidgetProps> = ({ runwayData }) => {
       );
     }
     return null;
+  };
+
+  // Custom pill label rendered on top of the reference line
+  const renderEmiLabel = (props: any) => {
+    const { viewBox } = props;
+    const x = (viewBox?.x ?? 40) + 12;
+    const y = (viewBox?.y ?? 100) - 10;
+    return (
+      <g>
+        <rect
+          x={x}
+          y={y - 10}
+          width={160}
+          height={18}
+          rx={4}
+          fill="#FAF8F5"
+          stroke="#DC2626"
+          strokeWidth={1}
+          strokeOpacity={0.8}
+        />
+        <text
+          x={x + 6}
+          y={y + 3}
+          fill="#DC2626"
+          fontSize={10}
+          fontFamily="JetBrains Mono"
+          fontWeight="bold"
+        >
+          CRITICAL EMI: ₹1,10,000
+        </text>
+      </g>
+    );
   };
 
   return (
@@ -111,6 +143,7 @@ export const RunwayWidget: React.FC<RunwayWidgetProps> = ({ runwayData }) => {
             <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
               <XAxis
                 dataKey="name"
+                interval={0}
                 tick={{ fontSize: 11, fontFamily: 'Inter', fill: '#78716C' }}
                 axisLine={{ stroke: '#E5E0D8' }}
                 tickLine={false}
@@ -126,17 +159,11 @@ export const RunwayWidget: React.FC<RunwayWidgetProps> = ({ runwayData }) => {
               {/* Critical Loan EMI Threshold Line */}
               <ReferenceLine
                 y={criticalEmi}
+                isFront={true}
                 stroke="#DC2626"
                 strokeDasharray="4 4"
                 strokeWidth={2}
-                label={{
-                  value: 'CRITICAL EMI: ₹1,10,000',
-                  position: 'insideTopRight',
-                  fill: '#DC2626',
-                  fontSize: 10,
-                  fontFamily: 'JetBrains Mono',
-                  fontWeight: 'bold',
-                }}
+                label={renderEmiLabel}
               />
               <Bar dataKey="cash" radius={[4, 4, 0, 0]} maxBarSize={60}>
                 {chartData.map((entry, index) => (
@@ -148,34 +175,58 @@ export const RunwayWidget: React.FC<RunwayWidgetProps> = ({ runwayData }) => {
         </div>
 
         {/* Side-by-Side Mathematical Impact Cards */}
-        <div className="lg:col-span-5 space-y-3">
-          {/* Unprotected */}
-          <div className="p-3 rounded-md border border-rose-200 bg-rose-50/50 space-y-1">
-            <div className="flex items-center justify-between text-xs font-semibold text-rose-900">
-              <span className="flex items-center gap-1">
-                <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
-                Unprotected Full Payout
+        <div className="lg:col-span-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-3">
+          {/* Card A: Unprotected Risk Scenario */}
+          <div className="p-3.5 rounded-lg border border-red-200 bg-red-50/60 font-mono text-xs space-y-2">
+            <div className="flex items-center justify-between text-red-900 font-bold font-sans">
+              <span className="flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 text-red-600" />
+                Unprotected Full Release
               </span>
-              <span className="font-mono text-rose-700 font-bold">{coverageWithout} Coverage</span>
+              <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-red-200 text-red-800">
+                Default Threat
+              </span>
             </div>
-            <div className="text-[11px] text-rose-800 font-sans leading-relaxed">
-              Disbursing full ₹1,84,000 leaves only{' '}
-              <strong className="font-mono font-bold text-rose-950">{formatINR(freeCashWithout)}</strong> post-EMI free buffer, dangerously violating debt service liquidity policy.
+            <div className="flex justify-between items-baseline pt-1">
+              <span className="text-stone-600">Disbursed:</span>
+              <span className="font-bold text-stone-900 line-through">
+                {formatINR(runwayData?.disputed_or_payout_amount || 184000)}
+              </span>
+            </div>
+            <div className="flex justify-between items-baseline">
+              <span className="text-stone-600">Remaining Balance:</span>
+              <span className="font-bold text-red-700">{formatINR(cashWithoutPraman)}</span>
+            </div>
+            <div className="flex justify-between items-baseline border-t border-red-200/80 pt-1 text-[11px]">
+              <span className="text-stone-500">EMI Coverage Ratio:</span>
+              <span className="font-bold text-red-700">{coverageWithout} (Below Safety Buffer)</span>
             </div>
           </div>
 
-          {/* Praman Action */}
-          <div className="p-3 rounded-md border border-emerald-300 bg-emerald-50/60 space-y-1">
-            <div className="flex items-center justify-between text-xs font-semibold text-emerald-950">
-              <span className="flex items-center gap-1">
+          {/* Card B: Praman Recommended Protection */}
+          <div className="p-3.5 rounded-lg border border-emerald-200 bg-emerald-50/60 font-mono text-xs space-y-2">
+            <div className="flex items-center justify-between text-emerald-900 font-bold font-sans">
+              <span className="flex items-center gap-1.5">
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                Praman Protected Action
+                Praman Recommended Action
               </span>
-              <span className="font-mono text-emerald-700 font-bold">{coverageWith} Coverage</span>
+              <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-emerald-200 text-emerald-800">
+                Safe Buffer
+              </span>
             </div>
-            <div className="text-[11px] text-emerald-900 font-sans leading-relaxed">
-              Withholding unfiled GST (₹28,067.80) preserves{' '}
-              <strong className="font-mono font-bold text-emerald-950">{formatINR(freeCashWith)}</strong> post-EMI cushion, keeping the SME debt safe.
+            <div className="flex justify-between items-baseline pt-1">
+              <span className="text-stone-600">Statutory Tax Hold:</span>
+              <span className="font-bold text-emerald-800">
+                {formatINR(runwayData?.recommended_hold_or_recovery || 28067.8)}
+              </span>
+            </div>
+            <div className="flex justify-between items-baseline">
+              <span className="text-stone-600">Protected Cash Remaining:</span>
+              <span className="font-bold text-emerald-700">{formatINR(cashWithPraman)}</span>
+            </div>
+            <div className="flex justify-between items-baseline border-t border-emerald-200/80 pt-1 text-[11px]">
+              <span className="text-stone-500">EMI Coverage Ratio:</span>
+              <span className="font-bold text-emerald-800">{coverageWith} (Debt Protected)</span>
             </div>
           </div>
         </div>

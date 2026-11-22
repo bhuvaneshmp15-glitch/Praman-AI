@@ -48,3 +48,67 @@
 .animate-pulse-subtle {
   animation: pulse-subtle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
+
+/* Organic botanical sway & float animations */
+@keyframes botanical-sway-1 {
+  0%, 100% {
+    transform: rotate(0deg) skewX(0deg) translate3d(0, 0, 0);
+  }
+  33% {
+    transform: rotate(2.5deg) skewX(1.5deg) translate3d(4px, -3px, 0);
+  }
+  66% {
+    transform: rotate(-2deg) skewX(-1.2deg) translate3d(-3px, 2px, 0);
+  }
+}
+
+@keyframes botanical-sway-2 {
+  0%, 100% {
+    transform: rotate(0deg) skewX(0deg) translate3d(0, 0, 0);
+  }
+  40% {
+    transform: rotate(-3deg) skewX(-2deg) translate3d(-5px, -4px, 0);
+  }
+  80% {
+    transform: rotate(2deg) skewX(1.2deg) translate3d(3px, 2px, 0);
+  }
+}
+
+@keyframes botanical-sway-3 {
+  0%, 100% {
+    transform: rotate(0deg) translate3d(0, 0, 0);
+  }
+  50% {
+    transform: rotate(1.8deg) translate3d(3px, -5px, 0);
+  }
+}
+
+@keyframes glow-pulse {
+  0%, 100% {
+    opacity: 0.45;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.75;
+    transform: scale(1.04);
+  }
+}
+
+.animate-sway-1 {
+  animation: botanical-sway-1 8s ease-in-out infinite;
+  transform-origin: bottom center;
+}
+
+.animate-sway-2 {
+  animation: botanical-sway-2 9.5s ease-in-out infinite;
+  transform-origin: bottom left;
+}
+
+.animate-sway-3 {
+  animation: botanical-sway-3 7s ease-in-out infinite;
+  transform-origin: bottom right;
+}
+
+.animate-glow-pulse {
+  animation: glow-pulse 6s ease-in-out infinite;
+}

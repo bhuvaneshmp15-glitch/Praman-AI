@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Landing } from './pages/Landing';
 import { DemoTriggerMenu } from './components/DemoTriggerMenu';
 import { Workspace } from './components/Workspace';
 import { CitationDetailModal } from './components/CitationDetailModal';
@@ -23,6 +24,18 @@ import {
 } from './api/client';
 
 export const App: React.FC = () => {
+  // Client-side view routing: '/' (Landing) vs '/workspace' (Workspace)
+  const [currentView, setCurrentView] = useState<'landing' | 'workspace'>(() => {
+    if (typeof window !== 'undefined') {
+      const p = window.location.pathname.toLowerCase();
+      const h = window.location.hash.toLowerCase();
+      if (p.startsWith('/workspace') || h.includes('workspace')) {
+        return 'workspace';
+      }
+    }
+    return 'landing';
+  });
+
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [cases, setCases] = useState<DiscrepancyCase[]>([]);
   const [currentCase, setCurrentCase] = useState<DiscrepancyCase | null>(null);
@@ -41,6 +54,42 @@ export const App: React.FC = () => {
 
   // Active stream unsubscriber ref
   const streamUnsubRef = useRef<(() => void) | null>(null);
+
+  // Listen for browser back/forward and hash changes
+  useEffect(() => {
+    const handleLocationChange = () => {
+      const p = window.location.pathname.toLowerCase();
+      const h = window.location.hash.toLowerCase();
+      if (p.startsWith('/workspace') || h.includes('workspace')) {
+        setCurrentView('workspace');
+      } else {
+        setCurrentView('landing');
+      }
+    };
+    window.addEventListener('popstate', handleLocationChange);
+    window.addEventListener('hashchange', handleLocationChange);
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+      window.removeEventListener('hashchange', handleLocationChange);
+    };
+  }, []);
+
+  const handleNavigateToWorkspace = (scenarioId?: string) => {
+    setCurrentView('workspace');
+    try {
+      window.history.pushState(null, '', '/workspace');
+    } catch (_) {}
+    if (scenarioId) {
+      handleTriggerScenario(scenarioId);
+    }
+  };
+
+  const handleNavigateToLanding = () => {
+    setCurrentView('landing');
+    try {
+      window.history.pushState(null, '', '/');
+    } catch (_) {}
+  };
 
   // Initialize data on mount
   useEffect(() => {
@@ -223,6 +272,10 @@ export const App: React.FC = () => {
     return result;
   };
 
+  if (currentView === 'landing') {
+    return <Landing onLaunchWorkspace={handleNavigateToWorkspace} />;
+  }
+
   return (
     <div className="min-h-screen bg-paper flex flex-col font-sans">
       {/* Top Bar & 1-Click Judge Scenario Bar */}
@@ -231,6 +284,7 @@ export const App: React.FC = () => {
         activeScenarioId={activeScenarioId}
         isInvestigating={isInvestigating}
         onTriggerScenario={handleTriggerScenario}
+        onNavigateHome={handleNavigateToLanding}
       />
 
       {/* Main 50/50 Split Workspace */}

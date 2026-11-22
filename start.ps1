@@ -1,21 +1,21 @@
 # ==============================================================================
-# Praman Copilot — Autonomous B2B Financial Reconciliation Engine
+# Praman Copilot - Autonomous B2B Financial Reconciliation Engine
 # Arthaton 2026 Judge Startup Script (Windows PowerShell)
 # ==============================================================================
 
 Write-Host ""
 Write-Host "======================================================================" -ForegroundColor Cyan
-Write-Host "  PRAMAN AI — Autonomous Financial Reconciliation & Cashflow Protection" -ForegroundColor White
+Write-Host "  PRAMAN AI - Autonomous Financial Reconciliation and Cashflow Protection" -ForegroundColor White
 Write-Host "  Arthaton 2026 Startup Orchestrator (Windows)" -ForegroundColor Cyan
 Write-Host "======================================================================" -ForegroundColor Cyan
 Write-Host ""
 
 $ErrorActionPreference = "Stop"
 
-# 1. Verify Python & Node
+# 1. Verify Python and Node
 try {
     $pythonVersion = python --version
-    Write-Host "[✓] Python detected: $pythonVersion" -ForegroundColor Green
+    Write-Host "[OK] Python detected: $pythonVersion" -ForegroundColor Green
 } catch {
     Write-Error "Python is not installed or not in PATH."
     exit 1
@@ -23,7 +23,7 @@ try {
 
 try {
     $nodeVersion = node --version
-    Write-Host "[✓] Node detected: $nodeVersion" -ForegroundColor Green
+    Write-Host "[OK] Node detected: $nodeVersion" -ForegroundColor Green
 } catch {
     Write-Error "Node.js / npm is not installed or not in PATH."
     exit 1
@@ -34,7 +34,7 @@ $duckdbPath = "praman-data\praman.duckdb"
 $csvPath = "praman-data\raw_csvs\bank_statement.csv"
 
 if (-not (Test-Path $duckdbPath) -or -not (Test-Path $csvPath)) {
-    Write-Host "[1/3] Generating 10,040+ realistic noisy Indian financial rows & injecting scenarios..." -ForegroundColor Yellow
+    Write-Host "[1/3] Generating 10,040+ realistic noisy Indian financial rows..." -ForegroundColor Yellow
     python praman-data\generator.py
     python praman-data\patch_scenarios.py
     python praman-data\seed_duckdb.py
@@ -50,7 +50,7 @@ if (-not (Test-Path "praman-ui\node_modules")) {
     Pop-Location
 }
 
-# 4. Set Environment & Start Background Services
+# 4. Set Environment and Start Background Services
 $scriptRoot = $PSScriptRoot
 if (-not $scriptRoot) { $scriptRoot = Get-Location }
 
@@ -66,9 +66,10 @@ $uiProcess = Start-Process -FilePath "npm.cmd" -ArgumentList "run", "dev", "--",
 Write-Host ""
 Write-Host "======================================================================" -ForegroundColor Green
 Write-Host "  Praman Copilot is LIVE:" -ForegroundColor White
-Write-Host "  - Executive Dossier UI:  http://127.0.0.1:5173" -ForegroundColor Yellow
-Write-Host "  - FastAPI Documentation: http://127.0.0.1:8000/docs" -ForegroundColor Yellow
-Write-Host "  - Real-time Health:      http://127.0.0.1:8000/api/health" -ForegroundColor Yellow
+Write-Host "  - Editorial Landing Page: http://127.0.0.1:5173" -ForegroundColor Yellow
+Write-Host "  - Live Workspace:         http://127.0.0.1:5173/workspace" -ForegroundColor Yellow
+Write-Host "  - FastAPI Documentation:  http://127.0.0.1:8000/docs" -ForegroundColor Yellow
+Write-Host "  - Real-time Health:       http://127.0.0.1:8000/api/health" -ForegroundColor Yellow
 Write-Host "======================================================================" -ForegroundColor Green
 Write-Host "Press Ctrl+C to stop all servers."
 Write-Host ""
@@ -78,7 +79,7 @@ try {
         Start-Sleep -Seconds 1
     }
 } finally {
-    Write-Host "`nStopping Praman services..." -ForegroundColor Yellow
+    Write-Host "Stopping Praman services..." -ForegroundColor Yellow
     if ($apiProcess -and -not $apiProcess.HasExited) { Stop-Process -Id $apiProcess.Id -Force -ErrorAction SilentlyContinue }
     if ($uiProcess -and -not $uiProcess.HasExited) { Stop-Process -Id $uiProcess.Id -Force -ErrorAction SilentlyContinue }
     Write-Host "Praman successfully stopped." -ForegroundColor Green

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Database, ShieldAlert, RefreshCw, Cpu, CheckCircle2, Zap } from 'lucide-react';
+import { Database, ShieldAlert, RefreshCw, Cpu, CheckCircle2, Zap, ArrowLeft } from 'lucide-react';
 import { HealthResponse } from '../types';
 
 interface DemoTriggerMenuProps {
@@ -7,6 +7,7 @@ interface DemoTriggerMenuProps {
   activeScenarioId: string;
   isInvestigating: boolean;
   onTriggerScenario: (scenarioId: string) => void;
+  onNavigateHome?: () => void;
 }
 
 export const DemoTriggerMenu: React.FC<DemoTriggerMenuProps> = ({
@@ -14,6 +15,7 @@ export const DemoTriggerMenu: React.FC<DemoTriggerMenuProps> = ({
   activeScenarioId,
   isInvestigating,
   onTriggerScenario,
+  onNavigateHome,
 }) => {
   const scenarios = [
     {
@@ -54,6 +56,22 @@ export const DemoTriggerMenu: React.FC<DemoTriggerMenuProps> = ({
       {/* Top Banner: Brand + DuckDB Engine Stats */}
       <div className="max-w-[1720px] mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
+          {onNavigateHome && (
+            <button
+              onClick={onNavigateHome}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-stone-300 bg-white hover:bg-stone-100 text-stone-800 text-xs font-sans font-medium transition-all shadow-sm active:scale-98 cursor-pointer mr-1"
+              title="Return to Landing Page"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Landing Page</span>
+            </button>
+          )}
+
+          <div
+            className={`flex items-center gap-3 ${onNavigateHome ? 'cursor-pointer hover:opacity-85 transition-opacity' : ''}`}
+            onClick={onNavigateHome}
+            title={onNavigateHome ? "Back to Praman Editorial Overview" : undefined}
+          >
           <div className="w-9 h-9 rounded-md bg-[#1C1917] text-white flex items-center justify-center font-serif text-xl font-bold tracking-tight shadow-sm">
             प्र
           </div>
@@ -71,6 +89,7 @@ export const DemoTriggerMenu: React.FC<DemoTriggerMenuProps> = ({
             </p>
           </div>
         </div>
+      </div>
 
         {/* Live DuckDB Semantic Engine Status Pill */}
         <div className="flex flex-wrap items-center gap-2">
