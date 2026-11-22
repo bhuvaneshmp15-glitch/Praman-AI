@@ -20,6 +20,15 @@ export async function fetchCase(caseId: string): Promise<DiscrepancyCase> {
   return res.json();
 }
 
+export async function resetCases(): Promise<{ status: string; message: string }> {
+  const res = await fetch(`${API_BASE}/cases/reset`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) throw new Error(`Reset cases failed: ${res.statusText}`);
+  return res.json();
+}
+
 export async function triggerCase(scenarioId: string): Promise<{ case: DiscrepancyCase; stream_url: string }> {
   const res = await fetch(`${API_BASE}/cases/trigger/${scenarioId}`, {
     method: 'POST',

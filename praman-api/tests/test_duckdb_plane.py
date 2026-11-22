@@ -26,6 +26,22 @@ def test_guardrail_sum_running_balance(plane):
     assert "CRITICAL FINANCIAL BUG: Never SUM(running_balance) on bank_statement" in str(exc_info.value)
 
 
+def test_guardrail_sum_coalesce_running_balance(plane):
+    """Test that Anti-Bug Guardrail 1 catches SUM(COALESCE(running_balance, 0)) via sqlglot AST."""
+    sql = "SELECT SUM(COALESCE(running_balance, 0)) FROM bank_statement;"
+    with pytest.raises(SqlSemanticError) as exc_info:
+        plane.execute_query(sql)
+    assert "Blocked: cannot SUM running_balance" in str(exc_info.value)
+
+
+def test_guardrail_sum_cte_alias_running_balance(plane):
+    """Test that Anti-Bug Guardrail 1 catches SUM(rb) aliased through CTE via sqlglot AST."""
+    sql = "WITH cte AS (SELECT running_balance AS rb FROM bank_statement) SELECT SUM(rb) FROM cte;"
+    with pytest.raises(SqlSemanticError) as exc_info:
+        plane.execute_query(sql)
+    assert "Blocked: cannot SUM running_balance" in str(exc_info.value)
+
+
 def test_guardrail_cartesian_fanout_threshold(plane):
     """Test that Anti-Bug Guardrail 2 blocks loose jw_sim thresholds < 0.90."""
     sql_loose = "SELECT * FROM bank_statement WHERE jw_sim(narration, 'Sri Balaji') >= 0.75;"

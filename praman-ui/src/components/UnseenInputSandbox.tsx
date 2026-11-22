@@ -37,6 +37,7 @@ export const UnseenInputSandbox: React.FC<UnseenInputSandboxProps> = ({
   onSubmit,
 }) => {
   const [inputText, setInputText] = useState<string>('');
+  const [activeSampleIdx, setActiveSampleIdx] = useState<number | null>(null);
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [uploadResult, setUploadResult] = useState<StatementUploadResponse | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -50,7 +51,8 @@ export const UnseenInputSandbox: React.FC<UnseenInputSandboxProps> = ({
       text: 'Verify settlement status and GSTR-2B compliance for UTR 432910485799 Ganpati Trading Co',
       narration: 'UPI/432910485799/041126123045/PAYTO GANPATI TRADING CO/HDFC/001928374829',
       color: 'border-emerald-700/30 bg-emerald-50 hover:bg-emerald-100 text-emerald-950',
-      icon: CheckCircle2,
+      activeColor: 'border-emerald-600 bg-emerald-100 ring-1 ring-emerald-600 text-emerald-950 font-semibold',
+      icon: ArrowUpRight,
     },
     {
       label: 'Sample 2: Amount Mismatch SMS',
@@ -58,6 +60,7 @@ export const UnseenInputSandbox: React.FC<UnseenInputSandboxProps> = ({
       text: 'Investigate payment for Sri Balaji Ent Rs 18,400',
       narration: 'Dear SBI User, your A/c XX4892 debited by Rs 18,400.00 on 18-Nov-26 transfer to SRI BALAJI ENT UPI Ref 632819045112',
       color: 'border-amber-700/30 bg-amber-50 hover:bg-amber-100 text-amber-950',
+      activeColor: 'border-amber-600 bg-amber-100 ring-1 ring-amber-600 text-amber-950 font-semibold',
       icon: Sparkles,
     },
     {
@@ -66,11 +69,13 @@ export const UnseenInputSandbox: React.FC<UnseenInputSandboxProps> = ({
       text: 'Check if UTR 999999999999 is settled on our bank account',
       narration: 'NEFT-999999999999-ACME PVT LTD-CITI0000001',
       color: 'border-stone-700/30 bg-stone-100 hover:bg-stone-200 text-stone-900',
+      activeColor: 'border-stone-600 bg-stone-200 ring-1 ring-stone-600 text-stone-950 font-semibold',
       icon: HelpCircle,
     },
   ];
 
-  const handleApplySample = (sample: typeof samples[0]) => {
+  const handleApplySample = (sample: typeof samples[0], index: number) => {
+    setActiveSampleIdx(index);
     setInputText(sample.narration);
     onSubmit(sample.text, sample.narration);
   };
@@ -78,6 +83,7 @@ export const UnseenInputSandbox: React.FC<UnseenInputSandboxProps> = ({
   const handleFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputText.trim()) return;
+    setActiveSampleIdx(null);
     onSubmit(inputText.trim(), inputText.trim());
   };
 
@@ -93,7 +99,7 @@ export const UnseenInputSandbox: React.FC<UnseenInputSandboxProps> = ({
       const formData = new FormData();
       formData.append('file', file);
 
-      const resp = await fetch('http://localhost:8000/api/tools/upload-statement', {
+      const resp = await fetch('/api/tools/upload-statement', {
         method: 'POST',
         body: formData,
       });
@@ -160,19 +166,23 @@ export const UnseenInputSandbox: React.FC<UnseenInputSandboxProps> = ({
         </span>
         {samples.map((s, idx) => {
           const Icon = s.icon;
+          const isActive = activeSampleIdx === idx;
           return (
             <button
               key={idx}
               type="button"
               disabled={isInvestigating || isUploading}
-              onClick={() => handleApplySample(s)}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-left transition-all text-xs font-sans disabled:opacity-50 disabled:cursor-not-allowed ${s.color}`}
+              onClick={() => handleApplySample(s, idx)}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-left transition-all text-xs font-sans disabled:opacity-50 disabled:cursor-not-allowed ${
+                isActive ? s.activeColor : s.color
+              }`}
             >
               <Icon className="w-3.5 h-3.5 shrink-0" />
               <div>
                 <strong className="block text-[11px] font-bold leading-tight">{s.label}</strong>
                 <span className="block text-[10px] font-mono opacity-75 leading-tight">{s.subtitle}</span>
               </div>
+              {isActive && <span className="text-[10px] font-bold ml-0.5">✓</span>}
             </button>
           );
         })}

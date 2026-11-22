@@ -27,6 +27,23 @@ export const RunwayWidget: React.FC<RunwayWidgetProps> = ({ runwayData }) => {
   const coverageWithout = runwayData?.formatted?.coverage_without_praman || '1.15x';
   const coverageWith = runwayData?.formatted?.coverage_with_praman || '1.40x';
 
+  // Dynamic remaining days or exact due date
+  const dueDateStr = runwayData?.due_date || '2026-11-25';
+  const getEmiDueText = () => {
+    try {
+      const due = new Date(dueDateStr);
+      const today = new Date();
+      const diffTime = due.getTime() - today.getTime();
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      if (diffDays > 0) {
+        return `Upcoming EMI (${diffDays}d · Due ${dueDateStr})`;
+      }
+      return `Upcoming EMI (Due ${dueDateStr})`;
+    } catch {
+      return `Upcoming EMI (Due ${dueDateStr})`;
+    }
+  };
+
   const chartData = [
     {
       name: 'Unprotected Payout',
@@ -130,7 +147,7 @@ export const RunwayWidget: React.FC<RunwayWidgetProps> = ({ runwayData }) => {
             Current Bank Balance: <strong className="text-stone-900">{formatINR(currentBalance)}</strong>
           </span>
           <span className="px-2.5 py-1 rounded bg-red-50 border border-red-200 text-red-800 font-semibold">
-            Upcoming EMI (7d): {formatINR(criticalEmi)}
+            {getEmiDueText()}: {formatINR(criticalEmi)}
           </span>
         </div>
       </div>

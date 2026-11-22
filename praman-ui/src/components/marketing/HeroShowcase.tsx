@@ -107,7 +107,7 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({ onLaunchWorkspace })
         {/* Pastel Iridescent Gradient Pill CTA Button */}
         <div className="flex items-center justify-center gap-4">
           <button
-            onClick={() => onLaunchWorkspace('CASE-UPI-209')}
+            onClick={() => onLaunchWorkspace()}
             className="group relative inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-gradient-to-r from-[#F0D5E2] via-[#E1E5F2] to-[#D5EDE2] hover:opacity-95 text-black font-sans font-semibold text-xs sm:text-sm shadow-[0_0_25px_rgba(240,213,226,0.3)] transition-all duration-200 active:scale-98 cursor-pointer"
           >
             <span>Launch Live Workspace</span>
@@ -646,7 +646,7 @@ export const HeroShowcase: React.FC<HeroShowcaseProps> = ({ onLaunchWorkspace })
               {/* 30-Day EMI Runway Bar (Fixed at bottom of frame) */}
               <div className="mt-2 p-2.5 rounded-lg bg-[#0e0c0a] border border-[#1b1917]">
                 <div className="flex items-center justify-between text-[11px] mb-1.5">
-                  <span className="text-zinc-400">HDFC Bank Critical Loan EMI: <strong className="text-white font-mono">₹1,10,000</strong></span>
+                  <span className="text-zinc-400">Upcoming HDFC Loan EMI (Due 2026-11-25): <strong className="text-white font-mono">₹1,10,000</strong></span>
                   <span className="text-[#36ad55] font-mono font-semibold">Protected Buffer: 1.40x (₹1,54,000)</span>
                 </div>
                 <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden flex">

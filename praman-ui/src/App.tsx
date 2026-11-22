@@ -18,6 +18,7 @@ import {
   fetchCase,
   triggerCase,
   triggerCustomCase,
+  resetCases,
   fetchCitation,
   approveCase,
   subscribeToCaseStream,
@@ -39,7 +40,7 @@ export const App: React.FC = () => {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [cases, setCases] = useState<DiscrepancyCase[]>([]);
   const [currentCase, setCurrentCase] = useState<DiscrepancyCase | null>(null);
-  const [activeScenarioId, setActiveScenarioId] = useState<string>('CASE-GST-104');
+  const [activeScenarioId, setActiveScenarioId] = useState<string>('');
   const [isInvestigating, setIsInvestigating] = useState<boolean>(false);
   const [feedEvents, setFeedEvents] = useState<InvestigationFeedEvent[]>([]);
   const [runwayData, setRunwayData] = useState<RunwayImpact | null>(null);
@@ -74,6 +75,23 @@ export const App: React.FC = () => {
     };
   }, []);
 
+  const handleReset = async () => {
+    if (streamUnsubRef.current) {
+      streamUnsubRef.current();
+      streamUnsubRef.current = null;
+    }
+    setIsInvestigating(false);
+    setActiveScenarioId('');
+    setCurrentCase(null);
+    setFeedEvents([]);
+    setRunwayData(null);
+    try {
+      await resetCases();
+      const casesData = await fetchCases().catch(() => []);
+      if (casesData) setCases(casesData);
+    } catch (_) {}
+  };
+
   const handleNavigateToWorkspace = (scenarioId?: string) => {
     setCurrentView('workspace');
     try {
@@ -81,6 +99,8 @@ export const App: React.FC = () => {
     } catch (_) {}
     if (scenarioId) {
       handleTriggerScenario(scenarioId);
+    } else {
+      handleReset();
     }
   };
 
@@ -109,10 +129,6 @@ export const App: React.FC = () => {
       if (healthData) setHealth(healthData);
       if (casesData && casesData.length > 0) {
         setCases(casesData);
-        // Default to CASE-GST-104
-        const defaultCase = casesData.find((c) => c.case_id === 'CASE-GST-104') || casesData[0];
-        setCurrentCase(defaultCase);
-        setActiveScenarioId(defaultCase.case_id);
       }
     } catch (err) {
       console.error('Initialization error:', err);
@@ -284,6 +300,7 @@ export const App: React.FC = () => {
         activeScenarioId={activeScenarioId}
         isInvestigating={isInvestigating}
         onTriggerScenario={handleTriggerScenario}
+        onReset={handleReset}
         onNavigateHome={handleNavigateToLanding}
       />
 

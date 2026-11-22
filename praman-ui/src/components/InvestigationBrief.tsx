@@ -96,7 +96,7 @@ export const InvestigationBrief: React.FC<InvestigationBriefProps> = ({
             {currentCase.title}
           </h2>
           <p className="text-xs text-paper-muted font-sans">
-            Counterparty: <strong className="text-paper-text font-semibold">{currentCase.vendor_or_customer}</strong> · Disputed / Hold Amount:{' '}
+            Counterparty: <strong className="text-paper-text font-semibold">{currentCase.vendor_or_customer || currentCase.scenario_metadata?.vendor_name || currentCase.scenario_metadata?.customer_vpa || 'Counterparty'}</strong> · Disputed / Hold Amount:{' '}
             <strong className="font-mono text-paper-text font-bold">
               {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(currentCase.amount_at_risk)}
             </strong>

@@ -286,7 +286,7 @@ def run_investigation_sync(case_id: str, case_data: Optional[Dict[str, Any]] = N
 
         cit4 = record_finding(
             title="Debt Service Protection & Liquidity Policy",
-            detail=f"Current bank balance is {runway_calc['formatted']['current_bank_balance']}. Upcoming HDFC Loan EMI due in 7 days is {runway_calc['formatted']['upcoming_30d_critical_emi']}. Full payout leaves only {runway_calc['formatted']['post_emi_free_cash_without_praman']} free cash ({runway_calc['formatted']['coverage_without_praman']} coverage).",
+            detail=f"Current bank balance is {runway_calc['formatted']['current_bank_balance']}. Upcoming HDFC Loan EMI (Due 2026-11-25) is {runway_calc['formatted']['upcoming_30d_critical_emi']}. Full payout leaves only {runway_calc['formatted']['post_emi_free_cash_without_praman']} free cash ({runway_calc['formatted']['coverage_without_praman']} coverage).",
             citation_id="CIT-4",
             source_table="cashflow_commitments",
             row_id="COM-001"
@@ -325,7 +325,7 @@ Audit cross-checks across the semantic plane and public verification APIs reveal
 
 #### 2. Deterministic Cash-Flow & EMI Runway Impact
 - **Current Operating Bank Balance**: {runway_calc['formatted']['current_bank_balance']} [CIT-4]
-- **Upcoming 7-Day Critical Loan EMI**: {runway_calc['formatted']['upcoming_30d_critical_emi']} (*HDFC Business Loan*) [CIT-4]
+- **Upcoming Critical Loan EMI (Due 2026-11-25)**: {runway_calc['formatted']['upcoming_30d_critical_emi']} (*HDFC Business Loan*) [CIT-4]
 - **Scenario A (Unmitigated Full Payout of ₹1,84,000.00)**:
   - Cash remaining after payout: **{runway_calc['formatted']['cash_after_full_payout']}**
   - Post-EMI free cash buffer: **{runway_calc['formatted']['post_emi_free_cash_without_praman']}** (Debt service coverage ratio drops to **{runway_calc['formatted']['coverage_without_praman']}**, triggering `CRITICAL_DEFAULT_RISK` under company liquidity policy).
@@ -338,7 +338,7 @@ Audit cross-checks across the semantic plane and public verification APIs reveal
 #### 3. Prescribed Actions
 1. **Apply Statutory Payout Hold**: Place invoice `INV-2026-104` on hold for **₹28,067.80** (or full ₹1,84,000.00 pending vendor GSTR-1 upload).
 2. **Issue Automated Supplier Notice**: Dispatch GST compliance reminder to Sri Balaji Enterprises (`33AABCS1429B1Z2`).
-3. **Ring-Fence Loan EMI**: Lock ₹1,10,000.00 in the primary clearing account for HDFC Business Loan EMI due in 7 days.
+3. **Ring-Fence Loan EMI**: Lock ₹1,10,000.00 in the primary clearing account for HDFC Business Loan EMI (Due 2026-11-25).
 """
         actions = [
             {"action": "HOLD_PAYOUT_PARTIAL", "invoice_id": "INV-2026-104", "amount": 28067.80, "target": "GST_PORTION"},

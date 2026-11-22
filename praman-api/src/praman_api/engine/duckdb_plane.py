@@ -9,6 +9,8 @@ from typing import Dict, Any, Optional, List
 import duckdb
 import pandas as pd
 import numpy as np
+import sqlglot
+from sqlglot import exp
 
 from praman_api.config import settings
 from praman_api.engine.udfs import (
@@ -103,12 +105,49 @@ class DuckDBPlane:
             if not re.match(r'^(WITH|SELECT|EXPLAIN|PRAGMA|DESCRIBE)\b', clean_sql, re.IGNORECASE):
                 raise SqlSemanticError("READ-ONLY ERROR: DDL and DML mutation statements are strictly prohibited.")
 
-        # 2. Anti-Bug Guardrail 1 (Running Balance Sum Check)
+        # 2. Anti-Bug Guardrail 1 (Running Balance Sum Check via SQLGlot AST & Regex Fallback)
         sum_balance_pattern = r'\bsum\s*\(\s*(?:[a-zA-Z0-9_]+\.)?running_balance\s*\)'
-        if re.search(sum_balance_pattern, clean_sql, re.IGNORECASE):
+        blocked_sum_balance = False
+
+        try:
+            parsed_statements = sqlglot.parse(clean_sql, read="duckdb")
+            for statement in parsed_statements:
+                if not statement:
+                    continue
+                # Track all aliases of running_balance across CTEs and subqueries
+                bad_columns = {"running_balance"}
+                changed = True
+                while changed:
+                    changed = False
+                    for scope_node in statement.find_all(exp.Select):
+                        for select_expr in scope_node.expressions:
+                            if any(col.name.lower() in bad_columns for col in select_expr.find_all(exp.Column)):
+                                alias = select_expr.alias
+                                if alias and alias.lower() not in bad_columns:
+                                    bad_columns.add(alias.lower())
+                                    changed = True
+
+                # Inspect every exp.Sum node in the AST: walk all descendant exp.Column nodes inside SUM(...)
+                for sum_node in statement.find_all(exp.Sum):
+                    for col in sum_node.find_all(exp.Column):
+                        if col.name.lower() in bad_columns:
+                            blocked_sum_balance = True
+                            break
+                    if blocked_sum_balance:
+                        break
+                if blocked_sum_balance:
+                    break
+        except Exception:
+            if re.search(sum_balance_pattern, clean_sql, re.IGNORECASE):
+                blocked_sum_balance = True
+
+        if not blocked_sum_balance and re.search(sum_balance_pattern, clean_sql, re.IGNORECASE):
+            blocked_sum_balance = True
+
+        if blocked_sum_balance:
             raise SqlSemanticError(
-                "CRITICAL FINANCIAL BUG: Never SUM(running_balance) on bank_statement. "
-                "Use a CTE with ORDER BY txn_date DESC, row_id DESC LIMIT 1 to get the latest balance."
+                "Blocked: cannot SUM running_balance (even via COALESCE or CTE alias) — use closing balance via ORDER BY txn_date DESC LIMIT 1 "
+                "(CRITICAL FINANCIAL BUG: Never SUM(running_balance) on bank_statement)."
             )
 
         # 3. Anti-Bug Guardrail 2 (Cartesian Fanout Check - Static threshold analysis)

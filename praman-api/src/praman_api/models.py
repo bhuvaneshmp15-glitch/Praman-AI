@@ -25,6 +25,7 @@ class DiscrepancyCase(BaseModel):
     amount_at_risk: float
     invoice_or_ref_id: str
     description: str
+    vendor_or_customer: Optional[str] = None
     scenario_metadata: Dict[str, Any] = Field(default_factory=dict)
     brief: Optional[Dict[str, Any]] = None
     citations: List[Dict[str, Any]] = Field(default_factory=list)

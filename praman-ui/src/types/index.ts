@@ -94,6 +94,7 @@ export interface CitationDetailResponse {
 }
 
 export interface RunwayImpact {
+  due_date?: string;
   current_bank_balance: number;
   upcoming_30d_critical_emi: number;
   disputed_or_payout_amount: number;

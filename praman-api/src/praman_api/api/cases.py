@@ -19,8 +19,9 @@ INITIAL_CASES: Dict[str, Dict[str, Any]] = {
         "severity": "CRITICAL",
         "status": "TRIGGERED",
         "amount_at_risk": 184000.00,
+        "vendor_or_customer": "Sri Balaji Enterprises",
         "invoice_or_ref_id": "INV-2026-104",
-        "description": "Tally invoice INV-2026-104 unfiled in GSTR-2B. 8 phonetic decoys in bank narrations. Upcoming ₹1,10,000.00 HDFC Business Loan EMI due in 7 days.",
+        "description": "Tally invoice INV-2026-104 unfiled in GSTR-2B. 8 phonetic decoys in bank narrations. Upcoming ₹1,10,000.00 HDFC Business Loan EMI (Due 2026-11-25).",
         "scenario_metadata": {
             "vendor_name": "Sri Balaji Enterprises",
             "vendor_gstin": "33AABCS1429B1Z2",
@@ -40,9 +41,11 @@ INITIAL_CASES: Dict[str, Dict[str, Any]] = {
         "severity": "HIGH",
         "status": "TRIGGERED",
         "amount_at_risk": 14500.00,
+        "vendor_or_customer": "Rajesh Verma (Customer)",
         "invoice_or_ref_id": "pay_UPI209_FAIL",
         "description": "Customer reported ₹14,500 double debit. Gateway logs confirm UTR 432910485711 failed at bank switch, while UTR 432910485799 settled to merchant account under HDFC0000240.",
         "scenario_metadata": {
+            "vendor_name": "Rajesh Verma",
             "failed_utr": "432910485711",
             "captured_utr": "432910485799",
             "vendor_ifsc": "HDFC0000240",
@@ -59,6 +62,7 @@ INITIAL_CASES: Dict[str, Dict[str, Any]] = {
         "severity": "HIGH",
         "status": "TRIGGERED",
         "amount_at_risk": 84000.00,
+        "vendor_or_customer": "CloudSphere Infrastructure Solutions Pvt Ltd",
         "invoice_or_ref_id": "INV-2026-881",
         "description": "Invoice INV-2026-881 pending. Company policy POL-SLA-01 (SEC-4.2) mandates pro-rata deduction of ₹5,600.00 via debit note rather than full refund.",
         "scenario_metadata": {
@@ -80,6 +84,7 @@ INITIAL_CASES: Dict[str, Dict[str, Any]] = {
         "severity": "CRITICAL",
         "status": "TRIGGERED",
         "amount_at_risk": 125000.00,
+        "vendor_or_customer": "Apex Logistics Global Pvt Ltd",
         "invoice_or_ref_id": "INV-2026-404",
         "description": "Invoice INV-2026-404 marked PENDING_APPROVAL in ERP yet bank statement reflects two split payments of ₹62,500.00 each against PO8921.",
         "scenario_metadata": {
@@ -111,6 +116,14 @@ def get_case_or_404(case_id: str) -> Dict[str, Any]:
 def list_discrepancy_cases():
     """Lists all active and resolved investigation cases with status and risk amounts."""
     return [DiscrepancyCase(**c) for c in CASE_STORE.values()]
+
+
+@router.post("/reset", response_model=Dict[str, Any])
+def reset_cases():
+    """Resets all cases in memory back to initial clean state."""
+    global CASE_STORE
+    CASE_STORE = {k: v.copy() for k, v in INITIAL_CASES.items()}
+    return {"status": "RESET", "message": "All discrepancy cases reset to default clean state."}
 
 
 @router.get("/{case_id}", response_model=DiscrepancyCase)
