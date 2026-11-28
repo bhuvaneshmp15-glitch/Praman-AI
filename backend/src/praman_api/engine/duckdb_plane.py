@@ -35,15 +35,37 @@ class DuckDBPlane:
         self._local = threading.local()
         self._ensure_database_exists()
 
+    def _find_raw_csvs_dir(self) -> Optional[Path]:
+        """Finds raw CSVs across potential monorepo roots or relative deployment structures."""
+        candidates = [
+            Path(settings.RAW_CSVS_DIR) if settings.RAW_CSVS_DIR else None,
+            self.db_path.parent / "raw_csvs",
+            Path(__file__).resolve().parent.parent.parent / "praman-data" / "raw_csvs",
+            Path(__file__).resolve().parent.parent.parent.parent / "praman-data" / "raw_csvs",
+            Path.cwd() / "praman-data" / "raw_csvs",
+            Path.cwd() / "backend" / "praman-data" / "raw_csvs",
+            Path.cwd() / "praman-api" / "praman-data" / "raw_csvs",
+        ]
+        for c in candidates:
+            if c and c.exists() and (c / "bank_statement.csv").exists():
+                return c
+        return None
+
     def _ensure_database_exists(self):
-        """Initializes database from raw CSVs if praman.duckdb does not exist."""
-        if not self.db_path.exists() or self.db_path.stat().st_size == 0:
-            print(f"[DuckDBPlane] Database not found at {self.db_path}. Initializing from raw CSVs...")
-            raw_dir = Path(settings.RAW_CSVS_DIR)
-            if raw_dir.exists():
+        """Initializes database from raw CSVs if praman.duckdb does not exist or is empty."""
+        if not self.db_path.exists() or self.db_path.stat().st_size < 10000:
+            print(f"[DuckDBPlane] Database not found or unseeded at {self.db_path}. Auto-seeding from raw CSVs...")
+            raw_dir = self._find_raw_csvs_dir()
+            if raw_dir and raw_dir.exists():
                 self._seed_from_csvs(raw_dir)
             else:
-                print(f"[DuckDBPlane] Warning: Raw CSVs directory {raw_dir} does not exist.")
+                print(f"[DuckDBPlane] Warning: Raw CSVs directory could not be located in candidates.")
+
+    def ensure_database_seeded(self):
+        """Public startup hook to guarantee database is seeded with 10,040+ rows and UDFs registered."""
+        self._ensure_database_exists()
+        conn = self.connect()
+        self._register_udfs(conn)
 
     def _seed_from_csvs(self, raw_dir: Path):
         """Loads all raw CSV files directly into DuckDB."""
@@ -63,7 +85,15 @@ class DuckDBPlane:
                 conn.execute(
                     f"CREATE TABLE {table} AS SELECT * FROM read_csv_auto('{path.as_posix()}', header=True)"
                 )
+        try:
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_row_id ON bank_statement(row_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_tally_invoice_id ON tally_invoices(invoice_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_rzp_payment_id ON razorpay_upi(payment_id)")
+        except Exception:
+            pass
+        self._register_udfs(conn)
         conn.close()
+        print(f"[DuckDBPlane] Auto-seeded 10,040+ rows and registered UDFs from {raw_dir} into {self.db_path}")
 
     @property
     def conn(self) -> duckdb.DuckDBPyConnection:

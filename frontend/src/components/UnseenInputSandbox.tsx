@@ -100,7 +100,7 @@ export const UnseenInputSandbox: React.FC<UnseenInputSandboxProps> = ({
       const formData = new FormData();
       formData.append('file', file);
 
-      const resp = await fetch(`${API_BASE}/tools/upload-statement`, {
+      const resp = await fetch(`${API_BASE}/api/tools/upload-statement`, {
         method: 'POST',
         body: formData,
       });

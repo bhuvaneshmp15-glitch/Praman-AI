@@ -18,14 +18,41 @@ app = FastAPI(
     description="Autonomous B2B Financial Reconciliation & Cash-Flow Protection Engine for Indian SMEs."
 )
 
-# Enable CORS for Next.js / React UI
+# Enable CORS for Vite, Netlify (*.netlify.app), and custom origins
+cors_origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+for o in getattr(settings, "CORS_ORIGINS", []):
+    if o not in cors_origins:
+        cors_origins.append(o)
+for o in getattr(settings, "ALLOWED_ORIGINS", []):
+    if o not in cors_origins:
+        cors_origins.append(o)
+
+# Allow all origins for hackathon demo so Netlify never hits a CORS block
+if "*" not in cors_origins:
+    cors_origins.append("*")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
+    allow_origins=cors_origins,
+    allow_origin_regex=r"^https://.*\.netlify\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+def on_startup():
+    """Auto-seed DuckDB on startup if missing and register 4 Indic UDFs immediately."""
+    try:
+        db_plane.ensure_database_seeded()
+    except Exception as e:
+        print(f"[DuckDB Startup Warning] Could not auto-seed database: {e}")
 
 
 @app.get("/api/health", response_model=HealthResponse, tags=["health"])

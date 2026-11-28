@@ -41,6 +41,7 @@ EXPANSION_DICT = {
 }
 
 
+@functools.lru_cache(maxsize=16384)
 def extract_utr(text: str) -> str:
     """Extracts the exact 12-digit RRN/UTR from noisy Indian bank narrations.
     

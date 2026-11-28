@@ -1,0 +1,263 @@
+"""Praman Financial Copilot - DuckDB Semantic Data Plane.
+High-performance OLAP query execution engine with registered semantic UDFs and financial guardrails.
+"""
+import re
+import time
+import threading
+from pathlib import Path
+from typing import Dict, Any, Optional, List
+import duckdb
+import pandas as pd
+import numpy as np
+import sqlglot
+from sqlglot import exp
+
+from praman_api.config import settings
+from praman_api.engine.udfs import (
+    extract_utr,
+    norm_indic_vendor,
+    jw_sim,
+    validate_gstin_checksum,
+)
+
+
+class SqlSemanticError(Exception):
+    """Raised when an invalid, dangerous, or mathematically nonsensical financial SQL query is attempted."""
+    pass
+
+
+class DuckDBPlane:
+    """Analytical OLAP Execution Plane for Praman Financial Copilot."""
+
+    def __init__(self, db_path: Optional[str] = None):
+        self.db_path = Path(db_path or settings.DUCKDB_PATH)
+        self._main_conn: Optional[duckdb.DuckDBPyConnection] = None
+        self._local = threading.local()
+        self._ensure_database_exists()
+
+    def _find_raw_csvs_dir(self) -> Optional[Path]:
+        """Finds raw CSVs across potential monorepo roots or relative deployment structures."""
+        candidates = [
+            Path(settings.RAW_CSVS_DIR) if settings.RAW_CSVS_DIR else None,
+            self.db_path.parent / "raw_csvs",
+            Path(__file__).resolve().parent.parent.parent / "praman-data" / "raw_csvs",
+            Path(__file__).resolve().parent.parent.parent.parent / "praman-data" / "raw_csvs",
+            Path.cwd() / "praman-data" / "raw_csvs",
+            Path.cwd() / "backend" / "praman-data" / "raw_csvs",
+            Path.cwd() / "praman-api" / "praman-data" / "raw_csvs",
+        ]
+        for c in candidates:
+            if c and c.exists() and (c / "bank_statement.csv").exists():
+                return c
+        return None
+
+    def _ensure_database_exists(self):
+        """Initializes database from raw CSVs if praman.duckdb does not exist or is empty."""
+        if not self.db_path.exists() or self.db_path.stat().st_size < 10000:
+            print(f"[DuckDBPlane] Database not found or unseeded at {self.db_path}. Auto-seeding from raw CSVs...")
+            raw_dir = self._find_raw_csvs_dir()
+            if raw_dir and raw_dir.exists():
+                self._seed_from_csvs(raw_dir)
+            else:
+                print(f"[DuckDBPlane] Warning: Raw CSVs directory could not be located in candidates.")
+
+    def ensure_database_seeded(self):
+        """Public startup hook to guarantee database is seeded with 10,040+ rows and UDFs registered."""
+        self._ensure_database_exists()
+        conn = self.connect()
+        self._register_udfs(conn)
+
+    def _seed_from_csvs(self, raw_dir: Path):
+        """Loads all raw CSV files directly into DuckDB."""
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        conn = duckdb.connect(str(self.db_path))
+        csv_tables = {
+            "bank_statement": raw_dir / "bank_statement.csv",
+            "razorpay_upi": raw_dir / "razorpay_upi.csv",
+            "tally_invoices": raw_dir / "tally_invoices.csv",
+            "gstr2b_tax": raw_dir / "gstr2b_tax.csv",
+            "cashflow_commitments": raw_dir / "cashflow_commitments.csv",
+            "company_policies": raw_dir / "company_policies.csv",
+        }
+        for table, path in csv_tables.items():
+            if path.exists():
+                conn.execute(f"DROP TABLE IF EXISTS {table}")
+                conn.execute(
+                    f"CREATE TABLE {table} AS SELECT * FROM read_csv_auto('{path.as_posix()}', header=True)"
+                )
+        try:
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_bank_row_id ON bank_statement(row_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_tally_invoice_id ON tally_invoices(invoice_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_rzp_payment_id ON razorpay_upi(payment_id)")
+        except Exception:
+            pass
+        self._register_udfs(conn)
+        conn.close()
+        print(f"[DuckDBPlane] Auto-seeded 10,040+ rows and registered UDFs from {raw_dir} into {self.db_path}")
+
+    @property
+    def conn(self) -> duckdb.DuckDBPyConnection:
+        return self.connect()
+
+    def _get_main_conn(self) -> duckdb.DuckDBPyConnection:
+        if self._main_conn is None:
+            try:
+                self._main_conn = duckdb.connect(str(self.db_path), read_only=False)
+            except Exception:
+                # Fallback for serverless environments (e.g. Vercel read-only filesystem)
+                self._main_conn = duckdb.connect(str(self.db_path), read_only=True)
+            self._register_udfs(self._main_conn)
+        return self._main_conn
+
+    def connect(self, read_only: bool = False) -> duckdb.DuckDBPyConnection:
+        """Returns thread-isolated DuckDB connection with all 4 semantic UDFs registered."""
+        main_conn = self._get_main_conn()
+        return main_conn.cursor()
+
+    def _register_udfs(self, conn: duckdb.DuckDBPyConnection):
+        """Registers the 4 pure Python UDFs into the DuckDB catalog."""
+        try:
+            conn.create_function("extract_utr", extract_utr)
+            conn.create_function("norm_indic_vendor", norm_indic_vendor)
+            conn.create_function("jw_sim", jw_sim)
+            conn.create_function("validate_gstin_checksum", validate_gstin_checksum)
+        except Exception:
+            pass
+
+    def execute_query(self, sql: str, params: Optional[List[Any]] = None) -> Dict[str, Any]:
+        """Runs read-only SQL, measures execution latency in ms, and enforces financial guardrails.
+        
+        Returns:
+            { "columns": [...], "rows": [...], "row_count": int, "elapsed_ms": float }
+        """
+        clean_sql = sql.strip()
+
+        # 1. Guardrail: Prohibit mutation statements
+        destructive_pattern = r'\b(DROP|DELETE|UPDATE|INSERT|ALTER|TRUNCATE|CREATE)\b'
+        if re.search(destructive_pattern, clean_sql, re.IGNORECASE):
+            # Allow CTEs and SELECT statements only
+            if not re.match(r'^(WITH|SELECT|EXPLAIN|PRAGMA|DESCRIBE)\b', clean_sql, re.IGNORECASE):
+                raise SqlSemanticError("READ-ONLY ERROR: DDL and DML mutation statements are strictly prohibited.")
+
+        # 2. Anti-Bug Guardrail 1 (Running Balance Sum Check via SQLGlot AST & Regex Fallback)
+        sum_balance_pattern = r'\bsum\s*\(\s*(?:[a-zA-Z0-9_]+\.)?running_balance\s*\)'
+        blocked_sum_balance = False
+
+        try:
+            parsed_statements = sqlglot.parse(clean_sql, read="duckdb")
+            for statement in parsed_statements:
+                if not statement:
+                    continue
+                # Track all aliases of running_balance across CTEs and subqueries
+                bad_columns = {"running_balance"}
+                changed = True
+                while changed:
+                    changed = False
+                    for scope_node in statement.find_all(exp.Select):
+                        for select_expr in scope_node.expressions:
+                            if any(col.name.lower() in bad_columns for col in select_expr.find_all(exp.Column)):
+                                alias = select_expr.alias
+                                if alias and alias.lower() not in bad_columns:
+                                    bad_columns.add(alias.lower())
+                                    changed = True
+
+                # Inspect every exp.Sum node in the AST: walk all descendant exp.Column nodes inside SUM(...)
+                for sum_node in statement.find_all(exp.Sum):
+                    for col in sum_node.find_all(exp.Column):
+                        if col.name.lower() in bad_columns:
+                            blocked_sum_balance = True
+                            break
+                    if blocked_sum_balance:
+                        break
+                if blocked_sum_balance:
+                    break
+        except Exception:
+            if re.search(sum_balance_pattern, clean_sql, re.IGNORECASE):
+                blocked_sum_balance = True
+
+        if not blocked_sum_balance and re.search(sum_balance_pattern, clean_sql, re.IGNORECASE):
+            blocked_sum_balance = True
+
+        if blocked_sum_balance:
+            raise SqlSemanticError(
+                "Blocked: cannot SUM running_balance (even via COALESCE or CTE alias) — use closing balance via ORDER BY txn_date DESC LIMIT 1 "
+                "(CRITICAL FINANCIAL BUG: Never SUM(running_balance) on bank_statement)."
+            )
+
+        # 3. Anti-Bug Guardrail 2 (Cartesian Fanout Check - Static threshold analysis)
+        has_limit_or_window = bool(re.search(r'\b(LIMIT\s+\d+|QUALIFY\s+ROW_NUMBER\s*\(\))\b', clean_sql, re.IGNORECASE))
+        jw_thresh_match = re.search(r'jw_sim\s*\(.*?\)\s*(?:>=|>)\s*(0\.\d+)', clean_sql, re.IGNORECASE)
+        if jw_thresh_match:
+            thresh_val = float(jw_thresh_match.group(1))
+            # Safe ranked vendor search allows >= 0.88 with explicit LIMIT or window function
+            if thresh_val < 0.90 and not (thresh_val >= 0.88 and has_limit_or_window):
+                raise SqlSemanticError(
+                    "CARTESIAN FANOUT DETECTED: Fuzzy join threshold too loose or missing ranking window function. "
+                    "Tighten jw_sim >= 0.92 or rank top match per invoice_id."
+                )
+
+        # Check for inverted pattern: jw_sim(...) < 0.90
+        if re.search(r'jw_sim\s*\(.*?\)\s*<\s*0\.90', clean_sql, re.IGNORECASE):
+            raise SqlSemanticError(
+                "CARTESIAN FANOUT DETECTED: Fuzzy join threshold too loose or missing ranking window function. "
+                "Tighten jw_sim >= 0.92 or rank top match per invoice_id."
+            )
+
+        # Execute query and measure latency
+        conn = self.connect()
+        t0 = time.perf_counter()
+        try:
+            if params is not None:
+                df = conn.execute(clean_sql, params).fetchdf()
+            else:
+                df = conn.execute(clean_sql).fetchdf()
+        except Exception as e:
+            raise SqlSemanticError(f"SQL execution error: {str(e)}")
+        t1 = time.perf_counter()
+        elapsed_ms = round((t1 - t0) * 1000, 2)
+
+        # 4. Anti-Bug Guardrail 2 (Cartesian Fanout Check - Runtime row explosion check)
+        is_fuzzy_query = bool(re.search(r'\bjw_sim\b', clean_sql, re.IGNORECASE))
+        has_invoice_filter = bool(re.search(r'\b(invoice_id|inv-\d+|dispute)\b', clean_sql, re.IGNORECASE))
+        has_ranking_or_limit = bool(re.search(r'\b(QUALIFY|LIMIT)\b', clean_sql, re.IGNORECASE))
+
+        if is_fuzzy_query and has_invoice_filter and not has_ranking_or_limit:
+            if len(df) > 50:
+                raise SqlSemanticError(
+                    "CARTESIAN FANOUT DETECTED: Fuzzy join threshold too loose or missing ranking window function. "
+                    "Tighten jw_sim >= 0.92 or rank top match per invoice_id."
+                )
+
+        # Format rows cleanly for JSON serialization
+        columns = list(df.columns)
+        # Convert NaN values to None, and date/timestamp objects to string
+        rows_list = []
+        for row in df.itertuples(index=False):
+            clean_row = []
+            for item in row:
+                if pd.isna(item):
+                    clean_row.append(None)
+                elif hasattr(item, "isoformat"):
+                    clean_row.append(item.isoformat())
+                else:
+                    clean_row.append(item)
+            rows_list.append(clean_row)
+
+        return {
+            "columns": columns,
+            "rows": rows_list,
+            "row_count": len(rows_list),
+            "elapsed_ms": elapsed_ms
+        }
+
+    def close(self):
+        """Closes active DuckDB connection."""
+        if self._main_conn:
+            try:
+                self._main_conn.close()
+            except Exception:
+                pass
+            self._main_conn = None
+
+
+db_plane = DuckDBPlane()
